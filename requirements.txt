@@ -1,0 +1,4 @@
+opencv-contrib-python>=4.12.0.88
+opencv-python>=4.12.0.88
+flask>=3.0.0
+numpy>=1.24.0

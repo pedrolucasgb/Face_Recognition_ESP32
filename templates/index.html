@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Reconhecimento Facial - Controle de Ponto</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .video-section {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .video-container {
+            position: relative;
+            border-radius: 10px;
+            overflow: hidden;
+            background: #000;
+        }
+
+        #video-stream {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        .info-section {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .info-card {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .info-card h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.3rem;
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 10px;
+        }
+
+        .status-display {
+            text-align: center;
+            padding: 20px;
+        }
+
+        .current-time {
+            font-size: 1.5rem;
+            color: #333;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+
+        .recognition-status {
+            font-size: 1.2rem;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 15px;
+            transition: all 0.3s ease;
+        }
+
+        .recognition-status.recognized {
+            background: #d4edda;
+            color: #155724;
+            border: 2px solid #c3e6cb;
+        }
+
+        .recognition-status.waiting {
+            background: #fff3cd;
+            color: #856404;
+            border: 2px solid #ffeaa7;
+        }
+
+        .pessoas-list {
+            list-style: none;
+        }
+
+        .pessoas-list li {
+            background: #f8f9fa;
+            padding: 10px 15px;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+            transition: transform 0.2s ease;
+        }
+
+        .pessoas-list li:hover {
+            transform: translateX(5px);
+            background: #e9ecef;
+        }
+
+        .pontos-hoje {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .ponto-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 15px;
+            margin-bottom: 8px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #28a745;
+        }
+
+        .ponto-nome {
+            font-weight: bold;
+            color: #333;
+        }
+
+        .ponto-horario {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .stats-section {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .stat-card {
+            text-align: center;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+        }
+
+        .stat-number {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+
+        .loading::after {
+            content: '';
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎭 Sistema de Reconhecimento Facial</h1>
+            <p>Controle de Ponto Automatizado</p>
+        </div>
+
+        <div class="nav-links" style="text-align: center; margin-bottom: 20px;">
+            <a href="/" style="color: white; text-decoration: none; padding: 10px 20px; background: rgba(255,255,255,0.2); border-radius: 25px; margin: 0 10px; transition: all 0.3s ease;">🏠 Início</a>
+            <a href="/registro" style="color: white; text-decoration: none; padding: 10px 20px; background: rgba(255,255,255,0.2); border-radius: 25px; margin: 0 10px; transition: all 0.3s ease;">➕ Registrar Pessoa</a>
+        </div>
+
+        <div class="main-content">
+            <div class="video-section">
+                <div class="video-container">
+                    <img id="video-stream" src="{{ url_for('video_feed') }}" alt="Stream da Webcam">
+                </div>
+            </div>
+
+            <div class="info-section">
+                <div class="info-card status-display">
+                    <h3>⏰ Status Atual</h3>
+                    <div class="current-time" id="current-time"></div>
+                    <div class="recognition-status waiting" id="recognition-status">
+                        Aguardando reconhecimento...
+                    </div>
+                    <div style="font-size: 0.8rem; color: #666; margin-top: 10px; text-align: left;">
+                        ℹ️ <strong>Como funciona:</strong><br>
+                        • Pessoa deve ser reconhecida por 3 segundos consecutivos<br>
+                        • Após registro, cooldown de 30 segundos<br>
+                        • Acompanhe o progresso na tela da câmera
+                    </div>
+                </div>
+
+                <div class="info-card">
+                    <h3>👥 Pessoas Cadastradas</h3>
+                    <ul class="pessoas-list" id="pessoas-list">
+                        <li class="loading">Carregando pessoas...</li>
+                    </ul>
+                </div>
+
+                <div class="info-card">
+                    <h3>✅ Pontos de Hoje</h3>
+                    <div class="pontos-hoje" id="pontos-hoje">
+                        <div class="loading">Carregando pontos...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="stats-section">
+            <h3>📊 Estatísticas do Dia</h3>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-number" id="total-pontos">0</div>
+                    <div class="stat-label">Pontos Hoje</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="pessoas-presentes">0</div>
+                    <div class="stat-label">Pessoas Diferentes</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="ultimo-ponto">--:--</div>
+                    <div class="stat-label">Último Ponto</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="total-cadastrados">0</div>
+                    <div class="stat-label">Total Cadastrados</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Atualiza horário atual
+        function updateCurrentTime() {
+            const now = new Date();
+            const timeStr = now.toLocaleString('pt-BR');
+            document.getElementById('current-time').textContent = timeStr;
+        }
+
+        // Carrega pessoas cadastradas
+        async function loadPessoas() {
+            try {
+                const response = await fetch('/api/pessoas');
+                const pessoas = await response.json();
+                const list = document.getElementById('pessoas-list');
+                
+                if (pessoas.length > 0) {
+                    list.innerHTML = pessoas.map(nome => 
+                        `<li>${nome}</li>`
+                    ).join('');
+                    document.getElementById('total-cadastrados').textContent = pessoas.length;
+                } else {
+                    list.innerHTML = '<li>Nenhuma pessoa cadastrada</li>';
+                }
+            } catch (error) {
+                console.error('Erro ao carregar pessoas:', error);
+                document.getElementById('pessoas-list').innerHTML = '<li>Erro ao carregar</li>';
+            }
+        }
+
+        // Carrega pontos de hoje
+        async function loadPontosHoje() {
+            try {
+                const response = await fetch('/api/pontos_hoje');
+                const pontos = await response.json();
+                const container = document.getElementById('pontos-hoje');
+                
+                if (pontos.length > 0) {
+                    container.innerHTML = pontos.map(ponto => 
+                        `<div class="ponto-item">
+                            <span class="ponto-nome">${ponto.nome}</span>
+                            <span class="ponto-horario">${ponto.hora}</span>
+                        </div>`
+                    ).join('');
+                    
+                    // Atualiza estatísticas
+                    document.getElementById('total-pontos').textContent = pontos.length;
+                    const pessoasUnicas = new Set(pontos.map(p => p.nome)).size;
+                    document.getElementById('pessoas-presentes').textContent = pessoasUnicas;
+                    if (pontos.length > 0) {
+                        document.getElementById('ultimo-ponto').textContent = pontos[0].hora;
+                    }
+                } else {
+                    container.innerHTML = '<div class="loading">Nenhum ponto registrado hoje</div>';
+                }
+            } catch (error) {
+                console.error('Erro ao carregar pontos:', error);
+                document.getElementById('pontos-hoje').innerHTML = '<div class="loading">Erro ao carregar pontos</div>';
+            }
+        }
+
+        // Verifica último reconhecimento
+        async function checkLastRecognition() {
+            try {
+                const response = await fetch('/api/last_recognition');
+                const data = await response.json();
+                const statusElement = document.getElementById('recognition-status');
+                
+                if (data.nome) {
+                    statusElement.className = 'recognition-status recognized pulse';
+                    statusElement.innerHTML = `
+                        <strong>✅ ${data.nome}</strong><br>
+                        <small>Ponto registrado: ${new Date(data.horario).toLocaleTimeString('pt-BR')}</small>
+                    `;
+                    
+                    // Remove a animação após 3 segundos
+                    setTimeout(() => {
+                        statusElement.classList.remove('pulse');
+                    }, 3000);
+                } else {
+                    statusElement.className = 'recognition-status waiting';
+                    statusElement.textContent = 'Aguardando reconhecimento...';
+                }
+            } catch (error) {
+                console.error('Erro ao verificar reconhecimento:', error);
+            }
+        }
+
+        // Inicialização
+        document.addEventListener('DOMContentLoaded', function() {
+            updateCurrentTime();
+            loadPessoas();
+            loadPontosHoje();
+            checkLastRecognition();
+            
+            // Atualiza horário a cada segundo
+            setInterval(updateCurrentTime, 1000);
+            
+            // Verifica reconhecimento a cada 2 segundos
+            setInterval(checkLastRecognition, 2000);
+            
+            // Atualiza pontos a cada 5 segundos
+            setInterval(loadPontosHoje, 5000);
+        });
+
+        // Detecta erros no stream de vídeo
+        document.getElementById('video-stream').onerror = function() {
+            this.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAwIiBoZWlnaHQ9IjYwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjhmOWZhIi8+CiAgPHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIyMCIgZmlsbD0iIzY2NyIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPkVycm8gYW8gY2FycmVnYXIgdmlkZW88L3RleHQ+Cjwvc3ZnPgo=';
+        };
+    </script>
+</body>
+</html>

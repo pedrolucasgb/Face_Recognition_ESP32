@@ -1,0 +1,13 @@
+[project]
+name = "face-recognition-esp32"
+version = "0.1.0"
+description = "Sistema de reconhecimento facial com Flask para controle de ponto"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "deepface>=0.0.95",
+    "opencv-contrib-python>=4.12.0.88",
+    "opencv-python>=4.12.0.88",
+    "flask>=3.0.0",
+    "numpy>=2.2.6",
+]
