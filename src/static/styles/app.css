@@ -5,6 +5,8 @@ body{font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--gra
 .header{padding:16px 24px}
 .header .title{max-width:1100px;margin:0 auto;font-size:20px;font-weight:600}
 .container{max-width:1100px;margin:24px auto;padding:0 16px 32px}
+.grid{display:grid;gap:24px;grid-template-columns:1fr 1fr}
+@media (max-width:900px){.grid{grid-template-columns:1fr}}
 .panel{background:#fff;border:1px solid var(--border);border-radius:6px;padding:16px}
 .video-wrap{position:relative;border:1px solid var(--border);border-radius:6px;overflow:hidden;background:#000}
 #video-stream,#raw-stream{display:block;width:100%;height:auto;transform:scaleX(-1)}
@@ -43,6 +45,10 @@ input:focus{outline:2px solid var(--red);border-color:var(--red)}
 .pessoa-item{display:flex;justify-content:space-between;padding:8px 12px;font-size:13px;border-bottom:1px solid var(--border)}
 .pessoa-item:last-child{border-bottom:none}
 .pessoa-item span.meta{color:var(--muted)}
+/* Legacy list-item support */
+.list-item{display:flex;justify-content:space-between;padding:8px 12px;font-size:13px;border-bottom:1px solid var(--border)}
+.list-item:last-child{border-bottom:none}
+.list-item span.meta{color:var(--muted)}
 /* Modal */
 .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:1000;padding:24px}
 .modal{background:#fff;width:min(480px,100%);border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,.25);border:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;animation:pop .22s ease}
@@ -53,3 +59,13 @@ input:focus{outline:2px solid var(--red);border-color:var(--red)}
 .modal footer{padding:12px 16px;display:flex;gap:12px;justify-content:flex-end;background:#fafafa;border-top:1px solid var(--border)}
 .modal .muted{color:var(--muted);font-size:12px}
 @keyframes pop{0%{transform:scale(.92);opacity:0}100%{transform:scale(1);opacity:1}}
+/* Overlay training (registro) */
+.overlay-training{position:fixed;inset:0;background:rgba(255,255,255,.85);backdrop-filter:blur(2px);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;font-family:inherit}
+.overlay-training.hidden{display:none}
+.overlay-training h3{font-size:18px;margin-bottom:18px;font-weight:600;color:var(--gray);text-align:center}
+.progress-track{width:320px;max-width:80vw;height:10px;background:#eee;border-radius:6px;overflow:hidden;position:relative;box-shadow:0 0 0 1px #ddd inset}
+.progress-bar{position:absolute;inset:0;background:linear-gradient(90deg,var(--red) 0%,#ff6b6b 50%,var(--red) 100%);background-size:200% 100%;animation:indet 1.2s linear infinite}
+@keyframes indet{0%{transform:translateX(-100%)}50%{transform:translateX(0)}100%{transform:translateX(100%)}}
+.training-msg{margin-top:14px;font-size:14px;color:var(--muted);text-align:center}
+/* Misc */
+.url-box{font-size:12px;background:#f5f7fa;padding:6px 8px;border-radius:6px;margin-top:8px;border:1px solid var(--border);word-break:break-all}

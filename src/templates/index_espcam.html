@@ -2,43 +2,16 @@
 <html lang="pt-br">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Visualização ESP32-CAM</title>
-  <style>
-    :root { --bg:#0e1114; --panel:#1e252c; --accent:#b00020; --accent-dark:#8a0019; --border:#2e3842; --text:#e5e7eb; --muted:#94a3b8; }
-    * { box-sizing:border-box; margin:0; padding:0; }
-    body { font-family: system-ui, Arial, sans-serif; background: var(--bg); color: var(--text); min-height:100vh; display:flex; flex-direction:column; }
-    header { padding:16px 24px; background: var(--accent); font-weight:600; }
-    header .inner { max-width:1100px; margin:0 auto; }
-    main { flex:1; max-width:1100px; margin:24px auto 40px; width:100%; padding:0 16px; }
-    .panel { background: var(--panel); border:1px solid var(--border); border-radius:8px; padding:20px; }
-    h1 { font-size:20px; margin-bottom:12px; }
-  .stream-wrap { position:relative; background:#000; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
-  .stream-wrap img, .stream-wrap iframe { display:block; width:100%; height:auto; }
-  #raw-stream { display:block; width:100%; height:auto; }
-  canvas#overlay { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; }
-  .stability-wrap { position:absolute; left:0; right:0; bottom:0; padding:10px 12px; z-index:5; display:none; }
-  .stability { background: rgba(0,0,0,0.6); border:1px solid rgba(255,255,255,0.15); border-radius:6px; padding:8px 10px; }
-  .stability .bar { width:100%; height:8px; background:#222; border-radius:5px; overflow:hidden; margin-top:6px; }
-  .stability .bar .fill { height:100%; width:0%; background:linear-gradient(90deg,#2e7d32,#66bb6a); transition:width .12s linear; }
-  .stability .text { font-size:12px; color:#fff; }
-    .info { margin-top:16px; font-size:14px; color: var(--muted); line-height:1.5; }
-    .actions { margin-top:20px; display:flex; gap:12px; flex-wrap:wrap; }
-    a.btn { text-decoration:none; background: var(--accent); color:#fff; padding:10px 16px; border-radius:6px; font-size:14px; border:1px solid var(--accent); }
-    a.btn:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
-    footer { background:#11181f; padding:12px 24px; font-size:12px; color: var(--muted); }
-    footer .inner { max-width:1100px; margin:0 auto; }
-    .status-badge { display:inline-block; padding:4px 8px; border-radius:12px; background:#24303b; font-size:12px; margin-left:8px; }
-    .url-box { margin-top:12px; font-size:12px; background:#162027; padding:8px 10px; border-radius:6px; word-break:break-all; border:1px solid var(--border); }
-  </style>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles/app.css') }}" />
 </head>
-<body>
-  <header><div class="inner">ESP32-CAM — Visualização de Stream</div></header>
-  <main>
-    <div class="panel">
-      <h1>Stream da Câmera <span class="status-badge">ESP32-CAM</span></h1>
-      <div class="stream-wrap">
-        <!-- Exibe stream bruto e sobrepõe canvas com bounding boxes -->
+<body data-page="recognition" data-source="espcam">
+  <header class="header"><div class="title">ESP32-CAM — Visualização de Stream</div></header>
+  <main class="container">
+    <section class="panel">
+      <h1 style="font-size:20px; margin-bottom:12px;">Stream da Câmera <span class="status-badge">ESP32-CAM</span></h1>
+      <div class="video-wrap">
         <img src="{{ stream_url }}" alt="Stream ESP32-CAM" id="raw-stream" />
         <canvas id="overlay"></canvas>
         <div class="stability-wrap" id="stability-wrap">
@@ -49,86 +22,20 @@
         </div>
       </div>
       <div class="url-box">Fonte: {{ stream_url }}</div>
-      <div class="info">
-        <p>Esta tela exibe diretamente o stream fornecido pelo módulo ESP32-CAM, sem processamento local. Para realizar reconhecimento facial ou registrar novo rosto usando esta fonte, utilize a página de registro dedicada abaixo.</p>
-        <ul style="margin-left:18px; margin-top:8px;">
+      <div class="instructions">
+        <ul>
           <li>Verifique iluminação adequada para melhor captura.</li>
           <li>Se o stream não carregar, confirme se o IP está acessível na rede local.</li>
-          <li>Atualize o valor de <code>ESP32_CAM_URL</code> no arquivo <code>.env</code> e reinicie o servidor para refletir mudanças.</li>
+          <li>Atualize o valor de ESP32_CAM_URL no arquivo .env e reinicie o servidor.</li>
         </ul>
       </div>
       <div class="actions">
         <a class="btn" href="{{ url_for('registro_espcam') }}">Ir para registro via ESP32-CAM</a>
-        <a class="btn" href="{{ url_for('index') }}">Voltar para reconhecimento local</a>
+        <a class="btn secondary" href="{{ url_for('index') }}">Reconhecimento local</a>
       </div>
-    </div>
+    </section>
   </main>
-  <footer><div class="inner">Sistema de Reconhecimento — Fonte: ESP32-CAM</div></footer>
-  <script>
-    const snapshotEndpoint = '/api/espcam/snapshot';
-    const overlay = document.getElementById('overlay');
-    const rawStream = document.getElementById('raw-stream');
-    const ctx = overlay.getContext('2d');
-    const stabWrap = document.getElementById('stability-wrap');
-    const stabFill = document.getElementById('stability-fill');
-    const stabText = document.getElementById('stability-text');
-    let processing = false;
-
-    function resizeCanvas(){
-      // Ajusta canvas ao elemento de imagem
-      const rect = rawStream.getBoundingClientRect();
-      overlay.width = rect.width;
-      overlay.height = rect.height;
-      overlay.style.width = rect.width + 'px';
-      overlay.style.height = rect.height + 'px';
-    }
-    window.addEventListener('resize', resizeCanvas);
-    rawStream.addEventListener('load', resizeCanvas);
-
-    async function cycle(){
-      if(processing){ return; }
-      processing = true;
-      try {
-        // Obtém snapshot do servidor (proxy) e envia para processamento do backend
-        const snapResp = await fetch(snapshotEndpoint + '?t=' + Date.now());
-        if(!snapResp.ok){ throw new Error('snapshot falhou'); }
-        const blob = await snapResp.blob();
-        const b64 = await new Promise(res=>{ const r = new FileReader(); r.onload=()=>res(r.result); r.readAsDataURL(blob); });
-        const procResp = await fetch('/api/process_frame', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ frame: b64 }) });
-        const data = await procResp.json();
-
-        // Desenha o frame processado (com bounding boxes) sobre o canvas
-        if(data && data.success && data.processed_frame){
-          const img = new Image();
-          img.onload = () => {
-            resizeCanvas();
-            ctx.clearRect(0,0,overlay.width, overlay.height);
-            ctx.drawImage(img, 0, 0, overlay.width, overlay.height);
-          };
-          img.src = data.processed_frame;
-        }
-        // Atualiza barra de estabilidade
-        const ui = (data && data.ui) || {};
-        if(ui.tracking){
-          stabWrap.style.display='block';
-          const pct = Math.max(0, Math.min(1, ui.progress||0));
-          stabFill.style.width = (pct*100).toFixed(0)+'%';
-          stabText.textContent = (ui.secondsLeft!=null) ? `Mantenha-se parado por ${ui.secondsLeft.toFixed(1)}s` : 'Mantenha-se parado...';
-        } else {
-          stabWrap.style.display='none';
-          stabFill.style.width = '0%';
-        }
-      } catch(err){
-        // Falha silenciosa para não interromper UI
-      } finally {
-        processing = false;
-        setTimeout(cycle, 200); // ~5 fps
-      }
-    }
-    document.addEventListener('DOMContentLoaded', () => {
-      resizeCanvas();
-      setTimeout(cycle, 400);
-    });
-  </script>
+  <footer class="footer"><div class="inner">Sistema de Reconhecimento — Fonte: ESP32-CAM</div></footer>
+  <script type="module" src="{{ url_for('static', filename='js/recognition.js') }}"></script>
 </body>
 </html>

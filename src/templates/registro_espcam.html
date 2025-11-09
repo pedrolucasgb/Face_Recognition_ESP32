@@ -2,49 +2,13 @@
 <html lang="pt-br">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Registro via ESP32-CAM</title>
-  <style>
-    :root { --bg:#0f1216; --panel:#1e252c; --accent:#b00020; --accent-dark:#8a0019; --border:#2e3842; --text:#e5e7eb; --muted:#94a3b8; }
-    * { box-sizing:border-box; margin:0; padding:0; }
-    body { font-family: system-ui, Arial, sans-serif; background: var(--bg); color: var(--text); min-height:100vh; display:flex; flex-direction:column; }
-    header { padding:16px 24px; background: var(--accent); font-weight:600; }
-    header .inner { max-width:1100px; margin:0 auto; }
-    main { flex:1; max-width:1100px; margin:24px auto 40px; width:100%; padding:0 16px; }
-    .grid { display:grid; gap:24px; grid-template-columns:1fr 1fr; }
-    @media (max-width:900px){ .grid { grid-template-columns:1fr; } }
-    .panel { background: var(--panel); border:1px solid var(--border); border-radius:8px; padding:20px; }
-    h1 { font-size:20px; margin-bottom:12px; }
-    h2 { font-size:16px; margin-bottom:12px; font-weight:600; }
-    label { display:block; font-size:13px; font-weight:600; margin-bottom:6px; }
-    input { width:100%; padding:10px 12px; font-size:14px; background:#162027; border:1px solid var(--border); border-radius:6px; color: var(--text); }
-    input:focus { outline:2px solid var(--accent); border-color: var(--accent); }
-    .actions { display:flex; gap:12px; flex-wrap:wrap; margin-top:12px; }
-    button.btn, a.btn { cursor:pointer; border:1px solid var(--accent); background: var(--accent); color:#fff; padding:10px 18px; font-size:14px; border-radius:6px; text-decoration:none; }
-    button.btn.secondary, a.btn.secondary { background:#162027; color: var(--accent); }
-    button.btn:disabled { opacity:.55; cursor:not-allowed; }
-    button.btn:hover:not(:disabled), a.btn:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
-  .stream-wrap { position:relative; background:#000; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
-  .stream-wrap img { width:100%; display:block; }
-  canvas#overlay { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; }
-  .hint { font-size:11px; color: var(--muted); margin-top:6px; }
-    .instructions { margin-top:14px; font-size:13px; color: var(--muted); line-height:1.5; }
-    .capture-count { margin-top:10px; font-size:13px; color: var(--muted); }
-    .status { margin-top:12px; font-size:13px; padding:10px 12px; border-radius:6px; border:1px solid var(--border); background:#162027; }
-    .status.error { border-color:#d93025; color:#ffb4b4; background:#2b1619; }
-    .status.success { border-color:#0f7b39; color:#b6f3c9; background:#0f2d1d; }
-    .list-reg { margin-top:18px; max-height:240px; overflow-y:auto; border:1px solid var(--border); border-radius:8px; }
-    .pessoa-item { display:flex; justify-content:space-between; padding:10px 12px; font-size:13px; border-bottom:1px solid var(--border); background:#162027; }
-    .pessoa-item:last-child { border-bottom:none; }
-    .pessoa-item span.meta { color: var(--muted); }
-    .url-box { font-size:12px; background:#162027; padding:6px 8px; border-radius:6px; margin-top:8px; border:1px solid var(--border); word-break:break-all; }
-    footer { background:#11181f; padding:12px 24px; font-size:12px; color: var(--muted); }
-    footer .inner { max-width:1100px; margin:0 auto; }
-  </style>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles/app.css') }}" />
 </head>
-<body>
-  <header><div class="inner">Registro de Rostos — Fonte ESP32-CAM</div></header>
-  <main>
+<body data-page="registro" data-source="espcam">
+  <header class="header"><div class="title">Registro de Rostos — Fonte ESP32-CAM</div></header>
+  <main class="container">
     <div class="grid">
       <section class="panel">
         <h2>Dados do Voluntário</h2>
@@ -63,11 +27,10 @@
       </section>
       <section class="panel">
         <h2>Stream ESP32-CAM</h2>
-        <div class="stream-wrap">
+        <div class="video-wrap">
           <img src="{{ stream_url }}" alt="Stream ESP32-CAM" id="espcam-stream" />
           <canvas id="overlay"></canvas>
         </div>
-        <div class="hint" id="frame-hint">Aguardando primeiro frame processado...</div>
         <div class="instructions">
           <ul>
             <li>Mantenha o rosto centralizado e bem iluminado.</li>
@@ -81,6 +44,7 @@
           <button class="btn secondary" id="btn-finalizar" type="button" disabled>Finalizar</button>
         </div>
         <div class="capture-count" id="capture-counter">Nenhuma foto capturada ainda.</div>
+        <div class="hint" id="frame-hint" style="font-size:11px; color:#666; margin-top:6px;">Aguardando primeiro frame processado...</div>
       </section>
     </div>
     <section class="panel" style="margin-top:24px;">
@@ -94,140 +58,7 @@
       </div>
     </section>
   </main>
-  <footer><div class="inner">Hospital do Cajuru — Registro via ESP32-CAM (somente stream)</div></footer>
-  <script>
-    let usuarioAtualId = null;
-    let fotosCapturadas = 0;
-    let etapa = 1;
-
-    function formatCPF(cpf){ return cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); }
-
-    // Máscara CPF
-    document.getElementById('cpf-pessoa').addEventListener('input', e => {
-      let v = e.target.value.replace(/\D/g,'').slice(0,11);
-      v = v.replace(/(\d{3})(\d)/, '$1.$2');
-      v = v.replace(/(\d{3})(\d)/, '$1.$2');
-      v = v.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
-      e.target.value = v;
-    });
-
-    async function loadPessoas(){
-      try {
-        const r = await fetch('/api/pessoas_registradas');
-        const pessoas = await r.json();
-        const box = document.getElementById('pessoas-lista');
-        if(pessoas.length){
-          box.innerHTML = pessoas.map(p => `<div class='pessoa-item'><div><strong>${p.nome}</strong><br><span class='meta'>CPF: ${formatCPF(p.cpf)} | Matrícula: ${p.matricula}</span></div><span>${p.imagens} foto(s)</span></div>`).join('');
-        } else {
-          box.innerHTML = '<div class="pessoa-item"><span>Nenhum registro ainda</span></div>';
-        }
-      } catch(err){
-        document.getElementById('pessoas-lista').innerHTML = '<div class="pessoa-item"><span>Erro ao carregar</span></div>';
-      }
-    }
-
-    function showMessage(msg, kind){
-      const box = document.getElementById('status-messages');
-      box.innerHTML='';
-      const el = document.createElement('div');
-      el.className = 'status '+(kind==='error'?'error':(kind==='success'?'success':''));
-      el.textContent = msg;
-      box.appendChild(el);
-      setTimeout(()=>{ if(box.contains(el)) box.removeChild(el); }, 6000);
-    }
-
-    async function verificarOuCriarUsuario(){
-      if(etapa!==1) return;
-      const nome = document.getElementById('nome-pessoa').value.trim();
-      const cpfFmt = document.getElementById('cpf-pessoa').value.trim();
-      const matricula = document.getElementById('matricula-pessoa').value.trim();
-      const email = document.getElementById('email-pessoa').value.trim();
-      if(!nome||!cpfFmt||!matricula){ showMessage('Preencha nome, CPF e matrícula.', 'error'); return; }
-      const cpf = cpfFmt.replace(/\D/g,'');
-      if(cpf.length!==11){ showMessage('CPF inválido.', 'error'); return; }
-      try {
-        const resp = await fetch('/api/usuario_status', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ nome, cpf, matricula, email }) });
-        const data = await resp.json();
-        if(!data.success){ showMessage(data.message||'Falha na verificação', 'error'); return; }
-        usuarioAtualId = data.usuario_id; etapa=2;
-        document.getElementById('btn-capturar').disabled=false;
-        document.getElementById('btn-finalizar').disabled=false;
-        document.getElementById('btn-reset').style.display='inline-block';
-        showMessage(data.message,'success');
-      }catch(err){ showMessage('Erro na comunicação com servidor.', 'error'); }
-    }
-
-    async function capturarFoto(){
-      if(!usuarioAtualId){ showMessage('Conclua etapa 1 primeiro.', 'error'); return; }
-      try {
-        const resp = await fetch('/api/capturar_foto', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ usuario_id: usuarioAtualId }) });
-        const data = await resp.json();
-        if(!data.success){ showMessage(data.message||'Erro ao capturar.', 'error'); return; }
-        fotosCapturadas = data.count; updateCounter(); showMessage('Foto salva.', 'success'); loadPessoas();
-      }catch(err){ showMessage('Erro ao capturar.', 'error'); }
-    }
-
-    function updateCounter(){
-      const el = document.getElementById('capture-counter');
-      el.textContent = `${fotosCapturadas} foto(s) capturada(s).`;
-      if(fotosCapturadas>=15){ el.textContent += ' Quantidade ideal atingida.'; }
-      else if(fotosCapturadas>=10){ el.textContent += ' Mínimo recomendado atingido.'; }
-    }
-
-    document.getElementById('btn-verificar').addEventListener('click', verificarOuCriarUsuario);
-    document.getElementById('btn-capturar').addEventListener('click', capturarFoto);
-    document.getElementById('btn-finalizar').addEventListener('click', async () => {
-      if(fotosCapturadas < 5){ showMessage('Capture ao menos 5 fotos.', 'error'); return; }
-      showMessage('Treinando modelo...', 'success');
-      try {
-        const r = await fetch('/api/recriar_modelo', { method:'POST' });
-        const data = await r.json();
-  if(data.success){ showMessage('Modelo atualizado.', 'success'); setTimeout(()=>{ window.location.href="{{ url_for('index_espcam') }}"; }, 1200); }
-        else { showMessage(data.message||'Falha ao treinar.', 'error'); }
-      }catch(err){ showMessage('Erro ao treinar modelo.', 'error'); }
-    });
-
-    document.getElementById('btn-reset').addEventListener('click', () => {
-      usuarioAtualId=null; fotosCapturadas=0; etapa=1; document.getElementById('form-cadastro').reset();
-      document.getElementById('btn-capturar').disabled=true; document.getElementById('btn-finalizar').disabled=true; document.getElementById('btn-reset').style.display='none';
-      document.getElementById('status-messages').innerHTML=''; document.getElementById('capture-counter').textContent='Nenhuma foto capturada ainda.';
-    });
-
-    // --- Poll de snapshot para alimentar cache de registro ---
-    const overlay = document.getElementById('overlay');
-    const streamImg = document.getElementById('espcam-stream');
-    const frameHint = document.getElementById('frame-hint');
-    const octx = overlay.getContext('2d');
-    let processing = false; let firstFrame = false;
-
-    function resizeCanvas(){
-      const rect = streamImg.getBoundingClientRect();
-      overlay.width = rect.width; overlay.height = rect.height;
-      overlay.style.width = rect.width+'px'; overlay.style.height = rect.height+'px';
-    }
-    window.addEventListener('resize', resizeCanvas);
-    streamImg.addEventListener('load', resizeCanvas);
-
-    async function pollRegistroFrame(){
-      if(processing) return; processing = true;
-      try{
-        const snap = await fetch('/api/espcam/snapshot?t='+Date.now());
-        if(!snap.ok){ throw new Error('snapshot'); }
-        const blob = await snap.blob();
-        const b64 = await new Promise(res=>{ const fr = new FileReader(); fr.onload=()=>res(fr.result); fr.readAsDataURL(blob); });
-        const proc = await fetch('/api/process_frame_registro', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ frame: b64 }) });
-        const data = await proc.json();
-        if(data && data.success && data.processed_frame){
-          const img = new Image();
-          img.onload = ()=>{ resizeCanvas(); octx.clearRect(0,0,overlay.width,overlay.height); octx.drawImage(img,0,0,overlay.width,overlay.height); };
-          img.src = data.processed_frame;
-          if(!firstFrame){ firstFrame=true; frameHint.textContent='Frame processado. Captura disponível.'; document.getElementById('btn-capturar').disabled = (etapa!==2); }
-        }
-      }catch(e){ /* silencioso */ }
-      finally { processing=false; setTimeout(pollRegistroFrame, 250); }
-    }
-
-    document.addEventListener('DOMContentLoaded', () => { loadPessoas(); resizeCanvas(); setTimeout(pollRegistroFrame, 400); });
-  </script>
+  <footer class="footer"><div class="inner">Hospital do Cajuru — Registro via ESP32-CAM</div></footer>
+  <script type="module" src="{{ url_for('static', filename='js/registro.js') }}"></script>
 </body>
 </html>
