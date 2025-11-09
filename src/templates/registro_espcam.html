@@ -9,8 +9,15 @@
 <body data-page="registro" data-source="espcam">
   <header class="header"><div class="title">Registro de Rostos — Fonte ESP32-CAM</div></header>
   <main class="container">
+    <div id="overlay-training" class="overlay-training hidden" aria-hidden="true">
+      <h3>Atualizando modelo de reconhecimento</h3>
+      <div class="progress-track"><div class="progress-bar"></div></div>
+      <div class="training-msg" id="training-text">Isso pode levar alguns segundos dependendo da quantidade de imagens...</div>
+      <button type="button" class="btn secondary" id="btn-cancel-train" style="margin-top:22px; display:none;" disabled>Cancelar</button>
+    </div>
+    <div class="step-indicator" id="etapa">Etapa 1 de 2 — Dados do voluntário</div>
     <div class="grid">
-      <section class="panel">
+      <section class="panel" id="form-panel">
         <h2>Dados do Voluntário</h2>
         <form id="form-cadastro" autocomplete="off">
           <div class="group"><label for="nome-pessoa">Nome completo *</label><input id="nome-pessoa" required placeholder="Fulano de Tal" /></div>
@@ -25,7 +32,7 @@
         <div id="status-messages"></div>
         <div class="url-box">Stream: {{ stream_url }}</div>
       </section>
-      <section class="panel">
+      <section class="panel" id="capture-panel" style="display:none;">
         <h2>Stream ESP32-CAM</h2>
         <div class="video-wrap">
           <img src="{{ stream_url }}" alt="Stream ESP32-CAM" id="espcam-stream" />

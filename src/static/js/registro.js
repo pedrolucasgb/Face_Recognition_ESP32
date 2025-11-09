@@ -43,6 +43,9 @@ function updateCaptureCounter(){
   el.textContent = `${fotosCapturadas} foto(s) capturada(s).`;
   if(fotosCapturadas>=15){ el.textContent += ' Quantidade ideal atingida.'; }
   else if(fotosCapturadas>=10){ el.textContent += ' Mínimo recomendado atingido.'; }
+  // Gate finalize button by minimum photo count
+  const btnFinalizar = document.getElementById('btn-finalizar');
+  if(btnFinalizar){ btnFinalizar.disabled = fotosCapturadas < 5; }
 }
 
 function setLoading(flag){
@@ -62,6 +65,9 @@ function resetCadastro(){
   const resetBtn=document.getElementById('btn-reset'); resetBtn && (resetBtn.style.display='none');
   const statusBox=document.getElementById('status-messages'); statusBox && (statusBox.innerHTML='');
   const counter=document.getElementById('capture-counter'); counter && (counter.textContent='Nenhuma foto capturada ainda.');
+  // Ensure buttons gated again
+  document.getElementById('btn-capturar') && (document.getElementById('btn-capturar').disabled=true);
+  document.getElementById('btn-finalizar') && (document.getElementById('btn-finalizar').disabled=true);
 }
 
 async function verificarOuCriarUsuario(){
@@ -81,8 +87,13 @@ async function verificarOuCriarUsuario(){
     const etapaEl=document.getElementById('etapa'); etapaEl && (etapaEl.textContent='Etapa 2 de 2 — Captura de fotos');
     document.getElementById('form-panel').style.display='none';
     document.getElementById('capture-panel').style.display='block';
-    document.getElementById('btn-capturar').disabled=false;
-    document.getElementById('btn-finalizar').disabled=false;
+    // For ESP32, enable capture only after first processed frame; finalize gated by photo count
+    if(isEsp){
+      document.getElementById('btn-capturar').disabled=true;
+    } else {
+      document.getElementById('btn-capturar').disabled=false;
+    }
+    document.getElementById('btn-finalizar').disabled=true; // always start disabled until minimum reached
     document.getElementById('btn-reset').style.display='inline-block';
     showMessage(data.message,'success');
     if(!isEsp){ initCamera(); }
@@ -114,7 +125,11 @@ async function finalizar(){
     const resp=await fetch('/api/recriar_modelo',{method:'POST'});
     const data=await resp.json();
     const elapsed=((Date.now()-start)/1000).toFixed(1);
-    if(data.success){ trainingText.textContent=`Modelo atualizado em ${elapsed}s. Redirecionando...`; showMessage(data.message||'Modelo atualizado.','success'); setTimeout(()=>{ window.location.href="/"; },1300); }
+    if(data.success){
+      trainingText.textContent=`Modelo atualizado em ${elapsed}s. Redirecionando...`;
+      showMessage(data.message||'Modelo atualizado.','success');
+      setTimeout(()=>{ window.location.href = isEsp ? "/espcam" : "/"; },1300);
+    }
     else { overlay.classList.add('hidden'); overlay.setAttribute('aria-hidden','true'); btnFinalizar.disabled=false; btnCapturar.disabled=false; showMessage(data.message||'Falha ao atualizar modelo.','error'); }
   }catch(err){ overlay.classList.add('hidden'); overlay.setAttribute('aria-hidden','true'); btnFinalizar.disabled=false; btnCapturar.disabled=false; showMessage('Erro ao comunicar com servidor para treinar modelo.','error'); }
 }
@@ -136,12 +151,33 @@ function startFrameProcessingRegistro(){
   if(isEsp) return; // ESP handled elsewhere
   setInterval(async ()=>{
     if(isProcessing || etapa !==2 || !video.videoWidth || !video.videoHeight) return;
+    isProcessing = true;
     try{
-      canvas.width=video.videoWidth; canvas.height=video.videoHeight; ctx.drawImage(video,0,0);
-      const b64 = canvas.toDataURL('image/jpeg',0.8);
+      // Capture frame from video
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = video.videoWidth;
+      tempCanvas.height = video.videoHeight;
+      const tempCtx = tempCanvas.getContext('2d');
+      tempCtx.drawImage(video, 0, 0);
+      const b64 = tempCanvas.toDataURL('image/jpeg', 0.8);
+      
+      // Send to process and get back with bounding box
       const r = await fetch('/api/process_frame_registro',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({ frame: b64 })});
-      await r.json();
+      const data = await r.json();
+      
+      // Draw processed frame (with bounding box) to visible canvas
+      if(data && data.success && data.processed_frame){
+        const img = new Image();
+        img.onload = () => {
+          canvas.width = img.width;
+          canvas.height = img.height;
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0);
+        };
+        img.src = data.processed_frame;
+      }
     }catch(e){ /*silent*/ }
+    finally{ isProcessing = false; }
   },150);
 }
 

@@ -35,6 +35,24 @@
       </div>
     </section>
   </main>
+  <!-- Modal de Confirmação -->
+  <div class="modal-backdrop" id="confirm-modal">
+    <div class="modal">
+      <header>Confirmar registro de ponto</header>
+      <div class="content">
+        <div class="row"><strong>Nome:</strong> <span id="m-nome">-</span></div>
+        <div class="row"><strong>CPF:</strong> <span id="m-cpf">-</span></div>
+        <div class="row"><strong>Matrícula:</strong> <span id="m-mat">-</span></div>
+        <div class="row"><strong>Horário:</strong> <span id="m-hora">-</span> <span class="muted" id="m-conf"></span></div>
+        <div class="row muted">Confira seus dados e confirme para registrar seu ponto.</div>
+        <div id="m-status" class="muted"></div>
+      </div>
+      <footer>
+        <button class="btn secondary" id="btn-cancelar">Cancelar</button>
+        <button class="btn" id="btn-confirmar">Confirmar</button>
+      </footer>
+    </div>
+  </div>
   <footer class="footer"><div class="inner">Sistema de Reconhecimento — Fonte: ESP32-CAM</div></footer>
   <script type="module" src="{{ url_for('static', filename='js/recognition.js') }}"></script>
 </body>

@@ -233,9 +233,9 @@ def api_process_frame_registro():
             cv2.putText(frame, 'Rosto Detectado', (x, y-10), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
         
-        # Adiciona instruções
+        # Adiciona instruções na parte superior
         cv2.putText(frame, 'Posicione seu rosto no centro', 
-                   (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+                   (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
         
         # Codifica frame processado de volta para JPEG
         ret, buffer = cv2.imencode('.jpg', frame)
@@ -251,6 +251,9 @@ def api_process_frame_registro():
         })
         
     except Exception as e:
+        print(f"[ERRO] process_frame_registro: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'message': f'Erro: {str(e)}'}), 500
 
 
@@ -341,63 +344,68 @@ def api_usuario_status():
 
 
 def usuario_status_internal(data, legacy: bool = False):
-    nome = (data.get('nome') or '').strip()
-    cpf_raw = (data.get('cpf') or '').strip()
-    matricula = (data.get('matricula') or '').strip()
-    email = (data.get('email') or '').strip() or None
+    try:
+        nome = (data.get('nome') or '').strip()
+        cpf_raw = (data.get('cpf') or '').strip()
+        matricula = (data.get('matricula') or '').strip()
+        email = (data.get('email') or '').strip() or None
 
-    # Normaliza CPF
-    cpf = ''.join(filter(str.isdigit, cpf_raw))
+        # Normaliza CPF
+        cpf = ''.join(filter(str.isdigit, cpf_raw))
 
-    if not nome or not cpf or not matricula:
-        return jsonify({
-            'success': False,
-            'message': 'Todos os campos (nome, cpf, matrícula) são obrigatórios'
-        }), 400
+        if not nome or not cpf or not matricula:
+            return jsonify({
+                'success': False,
+                'message': 'Todos os campos (nome, cpf, matrícula) são obrigatórios'
+            }), 400
 
-    if len(cpf) != 11:
-        return jsonify({
-            'success': False,
-            'message': 'CPF inválido'
-        }), 400
+        if len(cpf) != 11:
+            return jsonify({
+                'success': False,
+                'message': 'CPF inválido'
+            }), 400
 
-    with get_db() as db:
-        # Procura usuário por CPF ou matrícula
-        usuario = db.query(Usuario).filter((Usuario.cpf == cpf) | (Usuario.matricula == matricula)).first()
-        if usuario:
+        with get_db() as db:
+            # Procura usuário por CPF ou matrícula
+            usuario = db.query(Usuario).filter((Usuario.cpf == cpf) | (Usuario.matricula == matricula)).first()
+            if usuario:
+                return jsonify({
+                    'success': True,
+                    'new_user': False,
+                    'usuario_id': usuario.id,
+                    'cpf': usuario.cpf,
+                    'message': 'Usuário existente. Prossiga para captura de fotos.'
+                })
+
+            # Verifica duplicações específicas
+            dup_cpf = db.query(Usuario).filter(Usuario.cpf == cpf).first()
+            if dup_cpf:
+                return jsonify({
+                    'success': False,
+                    'message': 'CPF já cadastrado em outro registro'
+                }), 400
+            dup_mat = db.query(Usuario).filter(Usuario.matricula == matricula).first()
+            if dup_mat:
+                return jsonify({
+                    'success': False,
+                    'message': 'Matrícula já cadastrada em outro registro'
+                }), 400
+
+            # Cria novo usuário
+            novo = Usuario(nome=nome, cpf=cpf, matricula=matricula, email=email)
+            db.add(novo)
+            db.commit()
             return jsonify({
                 'success': True,
-                'new_user': False,
-                'usuario_id': usuario.id,
-                'cpf': usuario.cpf,
-                'message': 'Usuário existente. Prossiga para captura de fotos.'
+                'new_user': True,
+                'usuario_id': novo.id,
+                'cpf': novo.cpf,
+                'message': 'Usuário novo criado. Prossiga para captura de fotos.'
             })
-
-        # Verifica duplicações específicas
-        dup_cpf = db.query(Usuario).filter(Usuario.cpf == cpf).first()
-        if dup_cpf:
-            return jsonify({
-                'success': False,
-                'message': 'CPF já cadastrado em outro registro'
-            }), 400
-        dup_mat = db.query(Usuario).filter(Usuario.matricula == matricula).first()
-        if dup_mat:
-            return jsonify({
-                'success': False,
-                'message': 'Matrícula já cadastrada em outro registro'
-            }), 400
-
-        # Cria novo usuário
-        novo = Usuario(nome=nome, cpf=cpf, matricula=matricula, email=email)
-        db.add(novo)
-        db.commit()
-        return jsonify({
-            'success': True,
-            'new_user': True,
-            'usuario_id': novo.id,
-            'cpf': novo.cpf,
-            'message': 'Usuário novo criado. Prossiga para captura de fotos.'
-        })
+    except Exception as e:
+        # Log simples no console; poderia usar logging estruturado
+        print(f"[ERRO] usuario_status_internal: {e}")
+        return jsonify({'success': False, 'message': 'Erro interno ao verificar usuário'}), 500
 
 
 @app.route('/api/capturar_foto', methods=['POST'])
@@ -406,60 +414,76 @@ def api_capturar_foto():
     Corpo: { usuario_id }
     Retorna: { success, message, count, path }
     """
-    data = request.json or {}
-    usuario_id = data.get('usuario_id')
-    if not usuario_id:
-        return jsonify({'success': False, 'message': 'ID do usuário não fornecido'}), 400
+    try:
+        data = request.json or {}
+        usuario_id = data.get('usuario_id')
+        if not usuario_id:
+            return jsonify({'success': False, 'message': 'ID do usuário não fornecido'}), 400
 
-    with get_db() as db:
-        usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
-        if not usuario:
-            return jsonify({'success': False, 'message': 'Usuário não encontrado'}), 404
+        with get_db() as db:
+            usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
+            if not usuario:
+                return jsonify({'success': False, 'message': 'Usuário não encontrado'}), 404
 
-        cpf = usuario.cpf
-        # Pasta de rostos dentro de src/constants/rostos/<cpf>
-        base_dir = os.path.dirname(__file__)  # src
-        rostos_dir = os.path.join(base_dir, 'constants', 'rostos', cpf)
-        os.makedirs(rostos_dir, exist_ok=True)
+            cpf = usuario.cpf
+            # Pasta de rostos dentro de src/constants/rostos/<cpf>
+            base_dir = os.path.dirname(__file__)  # src
+            rostos_dir = os.path.join(base_dir, 'constants', 'rostos', cpf)
+            
+            # Cria pasta se não existir
+            try:
+                os.makedirs(rostos_dir, exist_ok=True)
+                print(f"[INFO] Pasta criada/confirmada: {rostos_dir}")
+            except Exception as dir_err:
+                print(f"[ERRO] Falha ao criar pasta {rostos_dir}: {dir_err}")
+                return jsonify({'success': False, 'message': f'Erro ao criar pasta: {str(dir_err)}'}), 500
 
-        # Usa o frame do cache ao invés de capturar diretamente da câmera
-        with last_frame_lock:
-            frame = last_frame_registro_cache.copy() if last_frame_registro_cache is not None else None
-        
-        if frame is None:
-            return jsonify({'success': False, 'message': 'Nenhum frame disponível. Aguarde o stream carregar.'}), 500
+            # Usa o frame do cache ao invés de capturar diretamente da câmera
+            with last_frame_lock:
+                frame = last_frame_registro_cache.copy() if last_frame_registro_cache is not None else None
+            
+            if frame is None:
+                return jsonify({'success': False, 'message': 'Nenhum frame disponível. Aguarde o stream carregar.'}), 500
 
-        # Recorta somente a região do rosto (bounding box) para usar no treinamento
-        face_img = _crop_face_from_frame(frame, margin=0.15, return_color=True)
-        if face_img is None:
-            return jsonify({'success': False, 'message': 'Nenhum rosto detectado. Tente ajustar o enquadramento/iluminação.'}), 400
+            # Recorta somente a região do rosto (bounding box) para usar no treinamento
+            face_img = _crop_face_from_frame(frame, margin=0.15, return_color=True)
+            if face_img is None:
+                return jsonify({'success': False, 'message': 'Nenhum rosto detectado. Tente ajustar o enquadramento/iluminação.'}), 400
 
-        # Nome do arquivo
-        timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S_%f')
-        existing = len([f for f in os.listdir(rostos_dir) if f.lower().endswith('.jpg')])
-        filename = f"{cpf}_{existing+1}_{timestamp}.jpg"
-        filepath = os.path.join(rostos_dir, filename)
+            # Nome do arquivo
+            timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S_%f')
+            existing = len([f for f in os.listdir(rostos_dir) if f.lower().endswith('.jpg')])
+            filename = f"{cpf}_{existing+1}_{timestamp}.jpg"
+            filepath = os.path.join(rostos_dir, filename)
 
-        # Salva somente o rosto (200x200, escala de cinza equalizada)
-        saved = cv2.imwrite(filepath, face_img)
-        if not saved:
-            return jsonify({'success': False, 'message': 'Falha ao salvar imagem'}), 500
+            # Salva somente o rosto (200x200, BGR)
+            saved = cv2.imwrite(filepath, face_img)
+            if not saved:
+                print(f"[ERRO] Falha ao salvar {filepath}")
+                return jsonify({'success': False, 'message': 'Falha ao salvar imagem'}), 500
 
-        # Atualiza caminho principal se vazio
-        if not usuario.foto_path:
-            usuario.foto_path = rostos_dir
-        db.add(usuario)
-        db.commit()
+            print(f"[INFO] Foto salva: {filepath}")
 
-        total = len([f for f in os.listdir(rostos_dir) if f.lower().endswith('.jpg')])
-        rel_path = os.path.relpath(filepath, base_dir)
+            # Atualiza caminho principal se vazio
+            if not usuario.foto_path:
+                usuario.foto_path = rostos_dir
+            db.add(usuario)
+            db.commit()
 
-        return jsonify({
-            'success': True,
-            'message': 'Foto capturada e salva com sucesso',
-            'count': total,
-            'path': rel_path
-        })
+            total = len([f for f in os.listdir(rostos_dir) if f.lower().endswith('.jpg')])
+            rel_path = os.path.relpath(filepath, base_dir)
+
+            return jsonify({
+                'success': True,
+                'message': 'Foto capturada e salva com sucesso',
+                'count': total,
+                'path': rel_path
+            })
+    except Exception as e:
+        print(f"[ERRO] api_capturar_foto: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': f'Erro ao capturar foto: {str(e)}'}), 500
 
 
 @app.route('/api/recriar_modelo', methods=['POST'])
