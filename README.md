@@ -210,16 +210,6 @@ Arquivo: `src/constants/config.py`
 | `POST /api/ajustar_tempos` | Ajusta estabilidade e cooldown |
 
 ---
-## Boas Práticas e Expansão
-
-- Melhorar variabilidade de expressões e ângulos no cadastro para robustez.
-- Adicionar verificação de qualidade (luminosidade, foco) antes de aceitar captura.
-- Migrar para modelos mais modernos (Ex: FaceNet, ArcFace) se necessário maior precisão.
-- Persistir metadata de cada imagem (ex: data, origem) em banco se for preciso auditoria.
-- Adicionar autenticação e autorização para proteger endpoints de ajuste.
-- Usar WebSocket para reduzir polling e latência do modal de reconhecimento.
-
----
 ## Expondo com ngrok (proxy reverso)
 
 Para acessar o servidor Flask a partir de dispositivos fora da sua rede local (por exemplo, celulares em 4G ou para uma demonstração remota), usamos um proxy reverso. Existem várias opções (Cloudflare Tunnel, localtunnel, frp etc.), mas neste projeto utilizamos o ngrok pela simplicidade.
