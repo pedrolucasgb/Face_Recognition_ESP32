@@ -24,7 +24,6 @@ O backend usa Flask + OpenCV e um modelo LBPH para reconhecimento. O frontend se
 - [Captura e Armazenamento de Imagens](#captura-e-armazenamento-de-imagens)
 - [Treinamento do Modelo](#treinamento-do-modelo)
 - [Endpoints de Diagnóstico e Ajuste](#endpoints-de-diagnóstico-e-ajuste)
-- [Boas Práticas e Expansão](#boas-práticas-e-expansão)
 - [Expondo com ngrok (proxy reverso)](#expondo-com-ngrok-proxy-reverso)
 
 ---
