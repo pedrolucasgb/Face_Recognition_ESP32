@@ -25,6 +25,7 @@ O backend usa Flask + OpenCV e um modelo LBPH para reconhecimento. O frontend se
 - [Treinamento do Modelo](#treinamento-do-modelo)
 - [Endpoints de Diagnóstico e Ajuste](#endpoints-de-diagnóstico-e-ajuste)
 - [Boas Práticas e Expansão](#boas-práticas-e-expansão)
+- [Expondo com ngrok (proxy reverso)](#expondo-com-ngrok-proxy-reverso)
 
 ---
 ## Arquitetura Geral
@@ -217,6 +218,46 @@ Arquivo: `src/constants/config.py`
 - Persistir metadata de cada imagem (ex: data, origem) em banco se for preciso auditoria.
 - Adicionar autenticação e autorização para proteger endpoints de ajuste.
 - Usar WebSocket para reduzir polling e latência do modal de reconhecimento.
+
+---
+## Expondo com ngrok (proxy reverso)
+
+Para acessar o servidor Flask a partir de dispositivos fora da sua rede local (por exemplo, celulares em 4G ou para uma demonstração remota), usamos um proxy reverso. Existem várias opções (Cloudflare Tunnel, localtunnel, frp etc.), mas neste projeto utilizamos o ngrok pela simplicidade.
+
+Por que ngrok aqui?
+- Fornece URL pública HTTPS (importante: navegadores exigem origem segura para liberar permissão de câmera de forma consistente).
+- Evita configurar port-forwarding no roteador.
+- Permite compartilhar rapidamente o sistema de reconhecimento/cadastro com outros dispositivos.
+
+Passos básicos (Windows PowerShell):
+
+```powershell
+# 1) Baixe e instale o ngrok (https://ngrok.com/download)
+# 2) Configure seu token (necessário após criar conta):
+ngrok config add-authtoken <SEU_AUTHTOKEN>
+
+# 3) Inicie um túnel HTTP para a porta do Flask (default 5000):
+ngrok http http://localhost:5000
+```
+
+Após iniciar, o ngrok exibirá uma URL pública do tipo:
+
+```
+Forwarding  https://<subdomínio>.ngrok.io -> http://localhost:5000
+```
+
+Use essa URL pública no celular para acessar o sistema (por exemplo, https://<subdomínio>.ngrok.io/ para reconhecimento e https://<subdomínio>.ngrok.io/registro para cadastro). Como é HTTPS, a permissão de câmera no navegador móvel tende a funcionar melhor.
+
+Notas e limitações com ESP32-CAM:
+- O endpoint `/api/espcam/snapshot` faz proxy de uma URL interna do ESP32 (ex.: `http://192.168.1.100/capture`). Ou seja, o servidor Flask precisa enxergar o IP da ESP32 na mesma rede. Se o Flask estiver rodando na sua máquina atrás do ngrok, dispositivos externos verão o site, mas o servidor ainda precisa alcançar a ESP32 via rede local.
+- Para cenários fora da LAN, considere colocar o servidor Flask na mesma rede da ESP32 (por exemplo, um PC/NAS local) ou expor a câmera de forma segura (VPN, túnel dedicado) — sempre com cuidado de segurança.
+
+Alternativas ao ngrok:
+- Cloudflare Tunnel (gratuito, permite domínio próprio)
+- localtunnel (simplicidade, sem conta)
+- frp (mais controle, requer um servidor público seu)
+
+Importante: ngrok é ótimo para desenvolvimento/demonstração. Para produção, utilize uma infraestrutura adequada (reverse proxy dedicado, TLS gerenciado, autenticação, proteção de endpoints, WAF etc.).
 
 ---
 ## Conceitos Rápidos dos Dois Modelos
