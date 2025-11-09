@@ -48,9 +48,18 @@ function updateStability(ui){
     mHora.textContent = new Date(det.horario).toLocaleString('pt-BR');
     mConf.textContent = det.confidence != null ? `(confiança: ${det.confidence.toFixed(1)})` : '';
     mStatus.textContent = '';
+    // Re-enable buttons when opening modal
+    if(btnConfirm){ btnConfirm.disabled = false; }
+    if(btnCancel){ btnCancel.disabled = false; }
     modal.style.display = 'flex';
   }
-  function closeModal(){ if(modal){ modal.style.display='none'; } detCache = null; }
+  function closeModal(){ 
+    if(modal){ modal.style.display='none'; } 
+    detCache = null;
+    // Re-enable buttons when closing
+    if(btnConfirm){ btnConfirm.disabled = false; }
+    if(btnCancel){ btnCancel.disabled = false; }
+  }
 
   async function pollDetection(){
     try{ const r = await fetch('/api/last_detection'); const data = await r.json(); if(data && data.found){ detCache=data; openModal(data);} }catch(e){/*silent*/}
@@ -66,11 +75,33 @@ function updateStability(ui){
       mStatus.textContent = 'Registrando...';
       btnConfirm.disabled = true; btnCancel.disabled = true;
       const r = await fetch('/api/confirmar_ponto', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ cpf: detCache.cpf, confidence: detCache.confidence, detection_id: detCache.detection_id })});
-      if(!r.ok){ const text = await r.text(); mStatus.textContent = `Falha (${r.status}). ${text || 'Resposta inválida do servidor.'}`; btnConfirm.disabled=false; btnCancel.disabled=false; return; }
-      let resp; try{ resp = await r.json(); }catch{ mStatus.textContent='Resposta inválida (JSON).'; btnConfirm.disabled=false; btnCancel.disabled=false; return; }
-      if(resp && resp.success){ mStatus.textContent='Ponto registrado com sucesso!'; setTimeout(closeModal, 1000); }
-      else { mStatus.textContent=(resp&&resp.message)?resp.message:'Falha ao registrar ponto.'; btnConfirm.disabled=false; btnCancel.disabled=false; }
-    }catch(err){ mStatus.textContent='Problema de conexão ao enviar dados.'; btnConfirm.disabled=false; btnCancel.disabled=false; }
+      if(!r.ok){ 
+        const text = await r.text(); 
+        mStatus.textContent = `Falha (${r.status}). ${text || 'Resposta inválida do servidor.'}`; 
+        btnConfirm.disabled=false; btnCancel.disabled=false; 
+        return; 
+      }
+      let resp; 
+      try{ resp = await r.json(); }
+      catch{ 
+        mStatus.textContent='Resposta inválida (JSON).'; 
+        btnConfirm.disabled=false; btnCancel.disabled=false; 
+        return; 
+      }
+      if(resp && resp.success){ 
+        mStatus.textContent='Ponto registrado com sucesso!'; 
+        setTimeout(()=>{
+          closeModal(); // This will re-enable buttons
+        }, 1000); 
+      }
+      else { 
+        mStatus.textContent=(resp&&resp.message)?resp.message:'Falha ao registrar ponto.'; 
+        btnConfirm.disabled=false; btnCancel.disabled=false; 
+      }
+    }catch(err){ 
+      mStatus.textContent='Problema de conexão ao enviar dados.'; 
+      btnConfirm.disabled=false; btnCancel.disabled=false; 
+    }
   });
 })();
 
