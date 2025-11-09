@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reconhecimento Facial para Ponto dos voluntários do hospital do Cajuru</title>
+    <style>
+        :root {
+            --red: #b00020;
+            --red-dark: #8a0019;
+            --gray-700: #2d2d2d;
+            --gray-500: #666;
+            --border: #e6e6e6;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: Arial, Helvetica, sans-serif; background: #ffffff; color: var(--gray-700); }
+
+        .header {
+            width: 100%;
+            background: var(--red);
+            color: #fff;
+            padding: 16px 24px;
+        }
+        .header .title { max-width: 1100px; margin: 0 auto; font-size: 20px; font-weight: 600; }
+
+        .container { max-width: 1100px; margin: 24px auto; padding: 0 16px 32px; }
+
+        .panel {
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 16px;
+        }
+
+        .video-wrap { border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: #000; }
+        #video-stream { display: block; width: 100%; height: auto; }
+
+        .instructions { margin-top: 16px; color: var(--gray-500); }
+        .instructions h3 { font-size: 16px; margin-bottom: 8px; color: var(--gray-700); }
+        .instructions ul { margin-left: 18px; line-height: 1.6; }
+
+        .actions { margin-top: 20px; display: flex; gap: 12px; }
+        .btn {
+            display: inline-block;
+            padding: 10px 16px;
+            border-radius: 4px;
+            text-decoration: none;
+            border: 1px solid var(--red);
+            color: #fff;
+            background: var(--red);
+        }
+        .btn:hover { background: var(--red-dark); border-color: var(--red-dark); }
+
+        .footer {
+            width: 100%;
+            background: var(--red);
+            color: #fff;
+            padding: 12px 24px;
+            position: sticky;
+            top: 100%;
+            margin-top: 24px;
+        }
+        .footer .inner { max-width: 1100px; margin: 0 auto; font-size: 13px; opacity: .9; }
+
+        @media (max-width: 640px) {
+            .header .title { font-size: 18px; }
+        }
+
+        /* Modal de confirmação */
+        .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: none; align-items: center; justify-content: center; z-index: 1000; }
+        .modal { background: #fff; width: 95%; max-width: 520px; border-radius: 8px; border: 1px solid var(--border); box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+        .modal header { padding: 14px 16px; border-bottom: 1px solid var(--border); font-weight: 600; }
+        .modal .content { padding: 16px; color: var(--gray-700); }
+        .modal .row { margin-bottom: 8px; font-size: 14px; }
+        .modal .muted { color: var(--gray-500); font-size: 13px; }
+        .modal footer { padding: 12px 16px; border-top: 1px solid var(--border); display: flex; gap: 10px; justify-content: flex-end; }
+        .btn.secondary { background: #fff; color: var(--red); }
+    </style>
+    <meta name="color-scheme" content="light">
+    <meta name="theme-color" content="#b00020">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="robots" content="noindex, nofollow">
+</head>
+<body>
+    <header class="header">
+        <div class="title">Reconhecimento Facial para Ponto dos voluntários do hospital do Cajuru</div>
+    </header>
+
+    <main class="container">
+        <section class="panel">
+            <div class="video-wrap">
+                <img id="video-stream" src="{{ url_for('video_feed') }}" alt="Exibição da câmera">
+            </div>
+
+            <div class="instructions">
+                <h3>Instruções</h3>
+                <ul>
+                    <li>Posicione seu rosto centralizado e visível pela câmera.</li>
+                    <li>Mantenha-se a aproximadamente 50–70 cm do dispositivo.</li>
+                    <li>Prefira um ambiente com boa iluminação frontal.</li>
+                    <li>Se você ainda não possui cadastro, clique no botão abaixo.</li>
+                    <li>Se você já possui cadastro, mas não consegue ser reconhecido, clique no botão abaixo.</li>
+                </ul>
+            </div>
+
+            <div class="actions">
+                <a class="btn" href="{{ url_for('registro') }}">Ir para cadastro de rosto</a>
+            </div>
+        </section>
+    </main>
+
+    <!-- Modal de Confirmação -->
+    <div class="modal-backdrop" id="confirm-modal">
+        <div class="modal">
+            <header>Confirmar registro de ponto</header>
+            <div class="content">
+                <div class="row"><strong>Nome:</strong> <span id="m-nome">-</span></div>
+                <div class="row"><strong>CPF:</strong> <span id="m-cpf">-</span></div>
+                <div class="row"><strong>Matrícula:</strong> <span id="m-mat">-</span></div>
+                <div class="row"><strong>Horário:</strong> <span id="m-hora">-</span> <span class="muted" id="m-conf"></span></div>
+                <div class="row muted">Confira seus dados e confirme para registrar seu ponto.</div>
+                <div id="m-status" class="muted"></div>
+            </div>
+            <footer>
+                <button class="btn secondary" id="btn-cancelar">Cancelar</button>
+                <button class="btn" id="btn-confirmar">Confirmar</button>
+            </footer>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <div class="inner">Hospital do Cajuru — Reconhecimento facial para registro de ponto</div>
+    </footer>
+
+    <script>
+        // Fallback caso o stream falhe
+        document.getElementById('video-stream').onerror = function() {
+            this.alt = 'Não foi possível acessar a câmera.';
+            this.style.background = '#111';
+        };
+
+        // Modal helpers
+        const modal = document.getElementById('confirm-modal');
+        const mNome = document.getElementById('m-nome');
+        const mCpf = document.getElementById('m-cpf');
+        const mMat = document.getElementById('m-mat');
+        const mHora = document.getElementById('m-hora');
+        const mConf = document.getElementById('m-conf');
+        const mStatus = document.getElementById('m-status');
+        let detCache = null;
+
+        function openModal(det){
+            mNome.textContent = det.nome;
+            mCpf.textContent = det.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+            mMat.textContent = det.matricula;
+            mHora.textContent = new Date(det.horario).toLocaleString('pt-BR');
+            mConf.textContent = det.confidence != null ? `(confiança: ${det.confidence.toFixed(1)})` : '';
+            mStatus.textContent = '';
+            modal.style.display = 'flex';
+        }
+        function closeModal(){ modal.style.display = 'none'; detCache = null; }
+
+        // Polling da última detecção para exibir popup
+        async function pollDetection(){
+            try{
+                const r = await fetch('/api/last_detection');
+                const data = await r.json();
+                if(data && data.found){ detCache = data; openModal(data); }
+            }catch(err){ /* silencioso */ }
+        }
+        setInterval(pollDetection, 1200);
+
+        // Ações modal
+        document.getElementById('btn-cancelar').onclick = closeModal;
+        document.getElementById('btn-confirmar').onclick = async function(){
+            if(!detCache){ return; }
+            try{
+                mStatus.textContent = 'Registrando...';
+                const r = await fetch('/api/confirmar_ponto', {
+                    method:'POST', headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({ cpf: detCache.cpf, confidence: detCache.confidence, detection_id: detCache.detection_id })
+                });
+                const resp = await r.json();
+                if(resp.success){
+                    mStatus.textContent = 'Ponto registrado com sucesso!';
+                    setTimeout(closeModal, 1000);
+                }else{
+                    mStatus.textContent = resp.message || 'Falha ao registrar ponto.';
+                }
+            }catch(err){
+                mStatus.textContent = 'Erro de comunicação.';
+            }
+        };
+    </script>
+</body>
+</html>

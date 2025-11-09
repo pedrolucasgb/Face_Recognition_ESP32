@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cadastro de Rostos - Voluntários Cajuru</title>
+    <style>
+        :root { --red:#b00020; --red-dark:#8a0019; --border:#e6e6e6; --gray:#444; --muted:#777; }
+        * { box-sizing: border-box; margin:0; padding:0; }
+        body { font-family: Arial, Helvetica, sans-serif; background:#fff; color: var(--gray); }
+        header, footer { background: var(--red); color:#fff; padding:16px 24px; }
+        header .title, footer .inner { max-width:1100px; margin:0 auto; font-weight:600; }
+        footer { font-size:13px; opacity:.9; }
+        main { max-width:1100px; margin:24px auto 40px; padding:0 16px; }
+        .grid { display:grid; gap:24px; grid-template-columns:1fr 1fr; }
+        @media (max-width:860px){ .grid { grid-template-columns:1fr; } }
+        .panel { border:1px solid var(--border); border-radius:6px; background:#fff; padding:16px 18px; }
+        h2 { font-size:18px; margin-bottom:12px; font-weight:600; }
+        form .group { margin-bottom:14px; }
+        label { display:block; font-size:13px; font-weight:600; margin-bottom:6px; }
+        input { width:100%; padding:10px 12px; font-size:14px; border:1px solid var(--border); border-radius:4px; }
+        input:focus { outline:2px solid var(--red); border-color: var(--red); }
+        .actions { display:flex; gap:12px; flex-wrap:wrap; margin-top:8px; }
+        .btn { cursor:pointer; border:1px solid var(--red); background: var(--red); color:#fff; padding:10px 18px; font-size:14px; border-radius:4px; text-decoration:none; }
+        .btn.secondary { background:#fff; color: var(--red); }
+        .btn:disabled { opacity:.55; cursor:not-allowed; }
+        .btn:hover:not(:disabled) { background: var(--red-dark); border-color: var(--red-dark); }
+        .status { margin-top:12px; font-size:13px; padding:10px 12px; border-radius:4px; border:1px solid var(--border); background:#fafafa; }
+        .status.error { border-color:#d93025; color:#b00020; background:#fff5f5; }
+        .status.success { border-color:#0f7b39; color:#0f5226; background:#f3fff6; }
+        .step-indicator { font-size:13px; margin-bottom:12px; color: var(--muted); }
+        .video-wrap { border:1px solid var(--border); border-radius:6px; overflow:hidden; background:#000; }
+        #video-stream { width:100%; display:block; }
+        .instructions { margin-top:14px; font-size:13px; color: var(--muted); }
+        .instructions ul { margin-left:18px; line-height:1.5; }
+        .capture-count { margin-top:10px; font-size:13px; color: var(--muted); }
+        .list-reg { margin-top:18px; max-height:240px; overflow-y:auto; border:1px solid var(--border); border-radius:6px; }
+        .list-item { display:flex; justify-content:space-between; padding:8px 12px; font-size:13px; border-bottom:1px solid var(--border); }
+        .list-item:last-child { border-bottom:none; }
+        .list-item span.meta { color: var(--muted); }
+    </style>
+    <meta name="color-scheme" content="light">
+</head>
+<body>
+    <header>
+        <div class="title">Cadastro de Rostos — Voluntários Hospital do Cajuru</div>
+    </header>
+    <main>
+        <div class="step-indicator" id="etapa">Etapa 1 de 2 — Dados do voluntário</div>
+        <div class="grid">
+            <section class="panel" id="form-panel">
+                <h2>Dados do Voluntário</h2>
+                <form id="form-cadastro" autocomplete="off">
+                    <div class="group">
+                        <label for="nome-pessoa">Nome completo *</label>
+                        <input id="nome-pessoa" name="nome" required placeholder="Fulano de Tal" />
+                    </div>
+                    <div class="group">
+                        <label for="cpf-pessoa">CPF *</label>
+                        <input id="cpf-pessoa" name="cpf" required maxlength="14" placeholder="000.000.000-00" />
+                    </div>
+                    <div class="group">
+                        <label for="matricula-pessoa">Matrícula *</label>
+                        <input id="matricula-pessoa" name="matricula" required placeholder="Identificador interno" />
+                    </div>
+                    <div class="group">
+                        <label for="email-pessoa">Email (opcional)</label>
+                        <input id="email-pessoa" name="email" type="email" placeholder="email@exemplo.com" />
+                    </div>
+                </form>
+                <div class="actions">
+                    <button class="btn" id="btn-verificar" type="button">Verificar / Continuar</button>
+                    <button class="btn secondary" id="btn-reset" type="button" style="display:none;">Novo cadastro</button>
+                </div>
+                <div id="status-messages"></div>
+            </section>
+            <section class="panel" id="capture-panel" style="display:none;">
+                <h2>Captura de Fotos</h2>
+                <div class="video-wrap">
+                    <img id="video-stream" src="{{ url_for('video_feed_registro') }}" alt="Stream da câmera">
+                </div>
+                <div class="instructions">
+                    <ul>
+                        <li>Mantenha o rosto centralizado e bem iluminado.</li>
+                        <li>Evite sombras fortes ou contraluz.</li>
+                        <li>Capture diversas fotos variando levemente ângulo e expressão.</li>
+                        <li>Recomendado: 10–15 fotos para melhor qualidade.</li>
+                    </ul>
+                </div>
+                <div class="actions">
+                    <button class="btn" id="btn-capturar" type="button" disabled>Capturar Foto</button>
+                    <button class="btn secondary" id="btn-finalizar" type="button" disabled>Finalizar</button>
+                </div>
+                <div class="capture-count" id="capture-counter">Nenhuma foto capturada ainda.</div>
+            </section>
+        </div>
+        <section class="panel" style="margin-top:24px;">
+            <h2>Registros Existentes</h2>
+            <div id="pessoas-lista" class="list-reg">
+                <div class="list-item"><span>Carregando...</span></div>
+            </div>
+        </section>
+        <div style="margin-top:16px;">
+            <a href="{{ url_for('index') }}" class="btn secondary">Voltar para reconhecimento</a>
+        </div>
+    </main>
+    <footer>
+        <div class="inner">Hospital do Cajuru — Sistema de reconhecimento (captura de rostos)</div>
+    </footer>
+
+    <script>
+        let usuarioAtualId = null;
+        let cpfAtual = null;
+        let fotosCapturadas = 0;
+        let etapa = 1;
+
+        // Máscara para CPF
+        document.getElementById('cpf-pessoa').addEventListener('input', e => {
+            let v = e.target.value.replace(/\D/g,'').slice(0,11);
+            v = v.replace(/(\d{3})(\d)/, '$1.$2');
+            v = v.replace(/(\d{3})(\d)/, '$1.$2');
+            v = v.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+            e.target.value = v;
+        });
+
+        // Carrega pessoas registradas
+        async function loadPessoasRegistradas() {
+            try {
+                const response = await fetch('/api/pessoas_registradas');
+                const pessoas = await response.json();
+                const container = document.getElementById('pessoas-lista');
+                
+                if (pessoas.length > 0) {
+                    container.innerHTML = pessoas.map(pessoa => 
+                        `<div class="pessoa-item">
+                            <div>
+                                <span class="pessoa-nome">${pessoa.nome}</span><br>
+                                <small style="color: #666;">CPF: ${formatCPF(pessoa.cpf)} | Matrícula: ${pessoa.matricula}</small>
+                            </div>
+                            <span class="pessoa-count">${pessoa.imagens} fotos</span>
+                        </div>`
+                    ).join('');
+                } else {
+                    container.innerHTML = '<div class="status-message status-info">Nenhuma pessoa registrada ainda</div>';
+                }
+            } catch (error) {
+                console.error('Erro ao carregar pessoas:', error);
+                document.getElementById('pessoas-lista').innerHTML = 
+                    '<div class="status-message status-error">Erro ao carregar pessoas registradas</div>';
+            }
+        }
+
+        // Formata CPF para exibição
+        function formatCPF(cpf) {
+            if (cpf.length === 11) {
+                return cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+            }
+            return cpf;
+        }
+
+        // Cadastra novo usuário
+        async function verificarOuCriarUsuario(){
+            if(etapa !== 1) return;
+            const nome = document.getElementById('nome-pessoa').value.trim();
+            const cpfFmt = document.getElementById('cpf-pessoa').value.trim();
+            const matricula = document.getElementById('matricula-pessoa').value.trim();
+            const email = document.getElementById('email-pessoa').value.trim();
+            if(!nome || !cpfFmt || !matricula){
+                showMessage('Preencha nome, CPF e matrícula.', 'error');
+                return;
+            }
+            const cpf = cpfFmt.replace(/\D/g,'');
+            if(cpf.length !== 11){
+                showMessage('CPF inválido.', 'error');
+                return;
+            }
+            try {
+                setLoading(true);
+                const resp = await fetch('/api/usuario_status', {
+                    method:'POST',
+                    headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({ nome, cpf, matricula, email })
+                });
+                const data = await resp.json();
+                if(!data.success){
+                    showMessage(data.message || 'Falha na verificação', 'error');
+                    return;
+                }
+                usuarioAtualId = data.usuario_id;
+                cpfAtual = data.cpf;
+                etapa = 2;
+                document.getElementById('etapa').textContent = 'Etapa 2 de 2 — Captura de fotos';
+                // Alterna painéis
+                document.getElementById('form-panel').style.display='none';
+                document.getElementById('capture-panel').style.display='block';
+                document.getElementById('btn-capturar').disabled = false;
+                document.getElementById('btn-finalizar').disabled = false;
+                document.getElementById('btn-reset').style.display='inline-block';
+                showMessage(data.message, 'success');
+            } catch(err){
+                showMessage('Erro na comunicação com o servidor', 'error');
+            } finally { setLoading(false); }
+        }
+
+        // Captura foto (a ser implementado)
+        async function capturarFoto(){
+            if(!usuarioAtualId){ showMessage('Primeiro conclua etapa 1.', 'error'); return; }
+            try {
+                setLoading(true);
+                const resp = await fetch('/api/capturar_foto', {
+                    method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ usuario_id: usuarioAtualId })
+                });
+                const data = await resp.json();
+                if(!data.success){ showMessage(data.message || 'Erro ao capturar', 'error'); return; }
+                fotosCapturadas = data.count;
+                updateCaptureCounter();
+                showMessage('Foto salva com sucesso.', 'success');
+                loadPessoasRegistradas();
+            } catch(err){
+                showMessage('Erro de comunicação ao capturar', 'error');
+            } finally { setLoading(false); }
+        }
+
+        // Atualiza contador de fotos
+        function updateCaptureCounter(){
+            const el = document.getElementById('capture-counter');
+            el.textContent = `${fotosCapturadas} foto(s) capturada(s).`;
+            if(fotosCapturadas >= 15){ el.textContent += ' Quantidade ideal atingida.'; }
+            else if(fotosCapturadas >= 10){ el.textContent += ' Mínimo recomendado atingido.'; }
+        }
+
+        // Mostra mensagem de status
+        function showMessage(msg, kind){
+            const box = document.getElementById('status-messages');
+            box.innerHTML = '';
+            const el = document.createElement('div');
+            el.className = 'status '+(kind==='error'?'error':(kind==='success'?'success':''));
+            el.textContent = msg;
+            box.appendChild(el);
+            setTimeout(()=>{ if(box.contains(el)) box.removeChild(el); }, 6000);
+        }
+
+        function setLoading(flag){
+            const btnVerificar = document.getElementById('btn-verificar');
+            if(flag){ btnVerificar.textContent = 'Processando...'; btnVerificar.disabled = true; }
+            else { btnVerificar.textContent = 'Verificar / Continuar'; btnVerificar.disabled = false; }
+        }
+
+        // Resetar formulário
+        function resetCadastro(){
+            usuarioAtualId = null; cpfAtual=null; fotosCapturadas=0; etapa=1;
+            document.getElementById('form-cadastro').reset();
+            document.getElementById('etapa').textContent = 'Etapa 1 de 2 — Dados do voluntário';
+            document.getElementById('form-panel').style.display='block';
+            document.getElementById('capture-panel').style.display='none';
+            document.getElementById('btn-reset').style.display='none';
+            document.getElementById('status-messages').innerHTML='';
+            document.getElementById('capture-counter').textContent='Nenhuma foto capturada ainda.';
+        }
+
+        // Permite Enter para cadastrar
+        document.getElementById('form-cadastro').addEventListener('submit', e => { e.preventDefault(); verificarOuCriarUsuario(); });
+        document.getElementById('btn-verificar').addEventListener('click', verificarOuCriarUsuario);
+        document.getElementById('btn-capturar').addEventListener('click', capturarFoto);
+        document.getElementById('btn-reset').addEventListener('click', resetCadastro);
+        document.getElementById('btn-finalizar').addEventListener('click', async () => {
+            if(fotosCapturadas < 5){
+                showMessage('Capture pelo menos 5 fotos antes de finalizar.', 'error');
+                return;
+            }
+            showMessage('Iniciando atualização do modelo...', 'success');
+            try {
+                const resp = await fetch('/api/recriar_modelo', { method:'POST' });
+                const data = await resp.json();
+                if(data.success){
+                    showMessage('Modelo atualizado. Redirecionando...', 'success');
+                    setTimeout(function(){ window.location.href="{{ url_for('index') }}"; }, 1500);
+                } else {
+                    showMessage(data.message || 'Falha ao atualizar modelo.', 'error');
+                }
+            } catch(err){
+                showMessage('Erro ao comunicar com servidor para treinar modelo.', 'error');
+            }
+        });
+
+        // Adiciona botão de reset
+        document.addEventListener('DOMContentLoaded', () => { loadPessoasRegistradas(); });
+
+        // Detecta erros no stream de vídeo
+        document.getElementById('video-stream').onerror = function(){ this.alt='Falha ao carregar câmera.'; };
+    </script>
+</body>
+</html>

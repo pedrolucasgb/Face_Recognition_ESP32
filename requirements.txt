@@ -2,3 +2,7 @@ opencv-contrib-python>=4.12.0.88
 opencv-python>=4.12.0.88
 flask>=3.0.0
 numpy>=1.24.0
+sqlalchemy>=2.0.0
+alembic>=1.13.0
+pymysql>=1.1.0
+python-dotenv>=1.0.0
