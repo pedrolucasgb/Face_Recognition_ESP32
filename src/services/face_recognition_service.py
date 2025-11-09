@@ -44,6 +44,8 @@ class FaceRecognitionService:
         self._cooldowns: Dict[str, datetime] = {}
         # Detecções pendentes aguardando confirmação: id -> {cpf, roi_color, best_conf, timestamp, bbox}
         self._pending: Dict[str, Dict] = {}
+        # Últimos dados para UI
+        self._last_faces = 0
 
     def train(self) -> int:
         """Treina (ou re-treina) o modelo LBPH lendo pastas por CPF.
@@ -100,6 +102,8 @@ class FaceRecognitionService:
         """
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         faces = self._face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=FACE_SIZE)
+        # atualiza contagem de faces para UI
+        self._last_faces = int(len(faces))
         found = None
 
         with self._lock:
@@ -120,10 +124,8 @@ class FaceRecognitionService:
                 label_id, confidence = recognizer.predict(roi_gray)
                 if confidence <= self.threshold and label_id in self._label_to_cpf:
                     cpf = self._label_to_cpf[label_id]
-                    # caixa verde para reconhecido
+                    # Caixa verde para reconhecido (sem texto)
                     cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 180, 0), 2)
-                    text = f"{cpf} {confidence:.1f}"
-                    cv2.putText(frame, text, (x+5, y+25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
                     # Lógica de estabilidade e cooldown
                     cooldown_until = self._cooldowns.get(cpf)
                     if cooldown_until and now < cooldown_until:
@@ -175,16 +177,38 @@ class FaceRecognitionService:
                             # Limpa candidato atual
                             self._current_candidate = None
                 else:
-                    # desconhecido -> caixa vermelha
+                    # Desconhecido -> caixa vermelha (sem texto)
                     cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 0, 255), 2)
-                    cv2.putText(frame, 'Desconhecido', (x+5, y+25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
             else:
-                # Sem modelo -> tudo desconhecido
+                # Sem modelo -> caixa vermelha sem texto
                 cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 0, 255), 2)
-                cv2.putText(frame, 'Treine o modelo', (x+5, y+25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
 
         if found and self.last_detection is None:
             self.last_detection = found
+
+    def get_ui_status(self) -> Dict:
+        """Retorna informações resumidas para UI: progresso de estabilidade e faces detectadas."""
+        now = datetime.utcnow()
+        tracking = self._current_candidate is not None
+        progress = 0.0
+        seconds_left = None
+        cooldown_active = False
+        if tracking:
+            cand = self._current_candidate
+            elapsed = (now - cand['start']).total_seconds()
+            progress = max(0.0, min(1.0, elapsed / max(0.001, self.stable_seconds)))
+            seconds_left = max(0.0, self.stable_seconds - elapsed)
+            # cooldown não se aplica enquanto em tracking; calcula se existir registro
+            cd = self._cooldowns.get(cand['cpf'])
+            cooldown_active = bool(cd and now < cd)
+        return {
+            'tracking': bool(tracking),
+            'progress': float(progress),
+            'secondsLeft': float(seconds_left) if seconds_left is not None else None,
+            'stableSeconds': float(self.stable_seconds),
+            'facesDetected': int(self._last_faces),
+            'cooldownActive': bool(cooldown_active)
+        }
 
     def set_timing(self, stable_seconds: Optional[float] = None, cooldown_seconds: Optional[float] = None):
         if stable_seconds is not None:

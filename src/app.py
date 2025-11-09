@@ -125,6 +125,7 @@ def api_process_frame():
         
         # Executa detecção e reconhecimento
         face_service.detect_and_recognize(frame)
+        ui = face_service.get_ui_status()
         
         # Codifica frame processado de volta para JPEG
         ret, buffer = cv2.imencode('.jpg', frame)
@@ -135,7 +136,8 @@ def api_process_frame():
         
         return jsonify({
             'success': True,
-            'processed_frame': f'data:image/jpeg;base64,{frame_base64}'
+            'processed_frame': f'data:image/jpeg;base64,{frame_base64}',
+            'ui': ui
         })
         
     except Exception as e:
