@@ -3,6 +3,8 @@ Aplicação Flask para Sistema de Reconhecimento Facial
 """
 from flask import Flask, render_template, Response, jsonify, request
 import cv2
+import numpy as np
+import base64
 import os
 from datetime import datetime
 from models.db import get_db, init_db
@@ -12,11 +14,17 @@ from services.face_recognition_service import get_face_service
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key'
 
+# Adiciona headers para permitir acesso à câmera
+@app.after_request
+def add_security_headers(response):
+    # Permite acesso a recursos de mídia
+    response.headers['Permissions-Policy'] = 'camera=*, microphone=*'
+    return response
+
 # Inicializa o banco de dados
 init_db()
 
-# Variável global para câmera
-camera = None
+# Variável global para serviço de reconhecimento facial
 face_service = get_face_service()
 
 # Classificador Haar para reutilização em todo o módulo (evita recriar a cada frame)
@@ -76,72 +84,6 @@ def _crop_face_from_frame(frame, margin: float = 0.15, return_color: bool = Fals
         return face_gray
 
 
-def get_camera():
-    """Obtém instância da câmera (singleton)"""
-    global camera
-    if camera is None:
-        camera = cv2.VideoCapture(0)
-    return camera
-
-
-def generate_frames():
-    """Gera frames da câmera para streaming de vídeo"""
-    global last_frame_cache
-    cam = get_camera()
-    
-    while True:
-        success, frame = cam.read()
-        if not success:
-            break
-        # Atualiza cache do último frame
-        with last_frame_lock:
-            last_frame_cache = frame.copy()
-        # Executa detecção e reconhecimento em cada frame
-        face_service.detect_and_recognize(frame)
-        # Codifica frame para JPEG
-        ret, buffer = cv2.imencode('.jpg', frame)
-        frame_bytes = buffer.tobytes()
-        # Retorna frame no formato multipart
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
-
-
-def generate_frames_registro():
-    """Gera frames da câmera para página de registro"""
-    global last_frame_registro_cache
-    cam = get_camera()
-    
-    while True:
-        success, frame = cam.read()
-        if not success:
-            break
-        
-        # Atualiza cache do último frame
-        with last_frame_lock:
-            last_frame_registro_cache = frame.copy()
-        
-        # Detecta faces para auxiliar no cadastro (usando classificador global)
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(60, 60))
-        
-        # Desenha retângulos ao redor das faces detectadas
-        for (x, y, w, h) in faces:
-            cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
-            cv2.putText(frame, 'Rosto Detectado', (x, y-10), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-        
-        # Adiciona instruções
-        cv2.putText(frame, 'Posicione seu rosto no centro', 
-                   (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-        
-        # Codifica frame para JPEG
-        ret, buffer = cv2.imencode('.jpg', frame)
-        frame_bytes = buffer.tobytes()
-        
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
-
-
 # ==================== ROTAS DE PÁGINAS ====================
 
 @app.route('/')
@@ -158,18 +100,100 @@ def registro():
 
 # ==================== ROTAS DE VÍDEO ====================
 
-@app.route('/video_feed')
-def video_feed():
-    """Stream de vídeo para reconhecimento"""
-    return Response(generate_frames(),
-                   mimetype='multipart/x-mixed-replace; boundary=frame')
+@app.route('/api/process_frame', methods=['POST'])
+def api_process_frame():
+    """Processa frame enviado pelo cliente para reconhecimento"""
+    try:
+        data = request.json or {}
+        frame_data = data.get('frame')
+        
+        if not frame_data:
+            return jsonify({'success': False, 'message': 'Frame não fornecido'}), 400
+        
+        # Decodifica base64 para imagem
+        img_data = base64.b64decode(frame_data.split(',')[1] if ',' in frame_data else frame_data)
+        nparr = np.frombuffer(img_data, np.uint8)
+        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        
+        if frame is None:
+            return jsonify({'success': False, 'message': 'Falha ao decodificar frame'}), 400
+        
+        # Atualiza cache do último frame
+        global last_frame_cache
+        with last_frame_lock:
+            last_frame_cache = frame.copy()
+        
+        # Executa detecção e reconhecimento
+        face_service.detect_and_recognize(frame)
+        
+        # Codifica frame processado de volta para JPEG
+        ret, buffer = cv2.imencode('.jpg', frame)
+        if not ret:
+            return jsonify({'success': False, 'message': 'Falha ao codificar frame'}), 500
+        
+        frame_base64 = base64.b64encode(buffer).decode('utf-8')
+        
+        return jsonify({
+            'success': True,
+            'processed_frame': f'data:image/jpeg;base64,{frame_base64}'
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Erro: {str(e)}'}), 500
 
 
-@app.route('/video_feed_registro')
-def video_feed_registro():
-    """Stream de vídeo para registro"""
-    return Response(generate_frames_registro(),
-                   mimetype='multipart/x-mixed-replace; boundary=frame')
+@app.route('/api/process_frame_registro', methods=['POST'])
+def api_process_frame_registro():
+    """Processa frame enviado pelo cliente para registro"""
+    try:
+        data = request.json or {}
+        frame_data = data.get('frame')
+        
+        if not frame_data:
+            return jsonify({'success': False, 'message': 'Frame não fornecido'}), 400
+        
+        # Decodifica base64 para imagem
+        img_data = base64.b64decode(frame_data.split(',')[1] if ',' in frame_data else frame_data)
+        nparr = np.frombuffer(img_data, np.uint8)
+        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        
+        if frame is None:
+            return jsonify({'success': False, 'message': 'Falha ao decodificar frame'}), 400
+        
+        # Atualiza cache do último frame
+        global last_frame_registro_cache
+        with last_frame_lock:
+            last_frame_registro_cache = frame.copy()
+        
+        # Detecta faces para auxiliar no cadastro
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(60, 60))
+        
+        # Desenha retângulos ao redor das faces detectadas
+        for (x, y, w, h) in faces:
+            cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
+            cv2.putText(frame, 'Rosto Detectado', (x, y-10), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+        
+        # Adiciona instruções
+        cv2.putText(frame, 'Posicione seu rosto no centro', 
+                   (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        
+        # Codifica frame processado de volta para JPEG
+        ret, buffer = cv2.imencode('.jpg', frame)
+        if not ret:
+            return jsonify({'success': False, 'message': 'Falha ao codificar frame'}), 500
+        
+        frame_base64 = base64.b64encode(buffer).decode('utf-8')
+        
+        return jsonify({
+            'success': True,
+            'processed_frame': f'data:image/jpeg;base64,{frame_base64}',
+            'faces_detected': len(faces)
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Erro: {str(e)}'}), 500
 
 
 # ==================== ROTAS DE API ====================
@@ -178,7 +202,7 @@ def video_feed_registro():
 def api_pessoas():
     """Retorna lista de pessoas cadastradas"""
     with get_db() as db:
-        usuarios = db.query(Usuario).filter(Usuario.ativo == True).all()
+        usuarios = db.query(Usuario).all()
         nomes = [usuario.nome for usuario in usuarios]
     return jsonify(nomes)
 
@@ -423,10 +447,13 @@ def api_ajustar_limite():
 @app.route('/api/predict_now', methods=['GET'])
 def api_predict_now():
     """Executa predição no frame atual e retorna detalhes (para depuração)."""
-    cam = get_camera()
-    success, frame = cam.read()
-    if not success:
-        return jsonify({'success': False, 'message': 'Falha ao ler câmera'}), 500
+    # Usa o frame do cache ao invés de capturar diretamente
+    with last_frame_lock:
+        frame = last_frame_cache.copy() if last_frame_cache is not None else None
+    
+    if frame is None:
+        return jsonify({'success': False, 'message': 'Nenhum frame disponível no cache'}), 500
+    
     result = face_service.debug_predict(frame)
     return jsonify({'success': True, 'result': result})
 
@@ -471,54 +498,71 @@ def api_last_detection():
 
 @app.route('/api/confirmar_ponto', methods=['POST'])
 def api_confirmar_ponto():
-    body = request.json or {}
-    cpf = body.get('cpf')
-    if not cpf:
-        return jsonify({'success': False, 'message': 'CPF não fornecido'}), 400
-    # Consome detecção pendente se houver detection_id, senão realiza captura direta
-    detection_id = body.get('detection_id')
-    with get_db() as db:
-        usuario = db.query(Usuario).filter(Usuario.cpf == cpf).first()
-        if not usuario:
-            return jsonify({'success': False, 'message': 'Usuário não encontrado'}), 404
-        foto_registro_rel = None
-        if detection_id:
-            det = face_service.consume_detection(detection_id)
-            if det and det.get('cpf') == cpf:
+    try:
+        body = request.json or {}
+        cpf = body.get('cpf')
+        if not cpf:
+            return jsonify({'success': False, 'message': 'CPF não fornecido'}), 400
+        # Consome detecção pendente se houver detection_id, senão realiza captura direta
+        detection_id = body.get('detection_id')
+        # Confiança pode vir string; tenta converter
+        confidence = body.get('confidence')
+         
+        try:
+            confidence = float(confidence) if confidence is not None else None
+        except Exception:
+            confidence = None
+
+        with get_db() as db:
+            usuario = db.query(Usuario).filter(Usuario.cpf == cpf).first()
+            if not usuario:
+                return jsonify({'success': False, 'message': 'Usuário não encontrado'}), 404
+            foto_registro_rel = None
+            if detection_id:
+                det = face_service.consume_detection(detection_id)
+                if det and det.get('cpf') == cpf:
+                    base_dir = os.path.join(os.path.dirname(__file__), 'constants', 'rostos', cpf)
+                    os.makedirs(base_dir, exist_ok=True)
+                    ts = datetime.utcnow().strftime('%Y%m%d_%H%M%S_%f')
+                    filename = f'confirm_{ts}.jpg'
+                    filepath = os.path.join(base_dir, filename)
+                    img = det.get('roi_color')
+                    if img is not None:
+                        try:
+                            cv2.imwrite(filepath, img)
+                            foto_registro_rel = os.path.relpath(filepath, os.path.dirname(__file__))
+                        except Exception as e:
+                            # Continua sem abortar; tenta fallback com frame atual
+                            print(f"[confirmar_ponto] Erro ao salvar ROI: {e}")
+            if not foto_registro_rel:
+                # Fallback: captura frame atual, recorta e salva
+                with last_frame_lock:
+                    frame = last_frame_cache.copy() if last_frame_cache is not None else None
+                
+                if frame is None:
+                    return jsonify({'success': False, 'message': 'Nenhum frame disponível no cache'}), 500
+                
+                face_img = _crop_face_from_frame(frame, margin=0.15, return_color=True)
+                if face_img is None:
+                    return jsonify({'success': False, 'message': 'Nenhum rosto detectado para confirmação'}), 400
                 base_dir = os.path.join(os.path.dirname(__file__), 'constants', 'rostos', cpf)
                 os.makedirs(base_dir, exist_ok=True)
                 ts = datetime.utcnow().strftime('%Y%m%d_%H%M%S_%f')
                 filename = f'confirm_{ts}.jpg'
                 filepath = os.path.join(base_dir, filename)
-                img = det.get('roi_color')
-                if img is not None:
-                    cv2.imwrite(filepath, img)
-                    foto_registro_rel = os.path.relpath(filepath, os.path.dirname(__file__))
-        if not foto_registro_rel:
-            # Fallback: captura frame atual, recorta e salva
-            with last_frame_lock:
-                frame = last_frame_cache.copy() if last_frame_cache is not None else None
-            
-            if frame is None:
-                return jsonify({'success': False, 'message': 'Nenhum frame disponível no cache'}), 500
-            
-            face_img = _crop_face_from_frame(frame, margin=0.15, return_color=True)
-            if face_img is None:
-                return jsonify({'success': False, 'message': 'Nenhum rosto detectado para confirmação'}), 400
-            base_dir = os.path.join(os.path.dirname(__file__), 'constants', 'rostos', cpf)
-            os.makedirs(base_dir, exist_ok=True)
-            ts = datetime.utcnow().strftime('%Y%m%d_%H%M%S_%f')
-            filename = f'confirm_{ts}.jpg'
-            filepath = os.path.join(base_dir, filename)
-            cv2.imwrite(filepath, face_img)
-            foto_registro_rel = os.path.relpath(filepath, os.path.dirname(__file__))
-        if not usuario.foto_path:
-            usuario.foto_path = os.path.join(os.path.dirname(__file__), 'constants', 'rostos', cpf)
-        ponto = PontoUsuario(usuario_id=usuario.id, confianca=body.get('confidence'), foto_registro_path=foto_registro_rel)
-        db.add(ponto)
-        db.add(usuario)
-        db.commit()
-    return jsonify({'success': True, 'message': 'Ponto registrado com sucesso.'})
+                cv2.imwrite(filepath, face_img)
+                foto_registro_rel = os.path.relpath(filepath, os.path.dirname(__file__))
+            if not usuario.foto_path:
+                usuario.foto_path = os.path.join(os.path.dirname(__file__), 'constants', 'rostos', cpf)
+            ponto = PontoUsuario(usuario_id=usuario.id, confianca=confidence, foto_registro_path=foto_registro_rel)
+            db.add(ponto)
+            db.add(usuario)
+            db.commit()
+        return jsonify({'success': True, 'message': 'Ponto registrado com sucesso.'})
+    except Exception as e:
+        # Garante resposta JSON para evitar erro de parse no frontend
+        print(f"[confirmar_ponto] Erro inesperado: {e}")
+        return jsonify({'success': False, 'message': f'Erro interno ao registrar ponto: {str(e)}'}), 500
 
 
 # ==================== MAIN ====================

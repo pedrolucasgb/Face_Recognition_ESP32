@@ -16,11 +16,11 @@ class Usuario(Base):
     Attributes:
         id: Identificador único do usuário
         nome: Nome completo do usuário
+        cpf: CPF do usuário (11 dígitos)
         matricula: Matrícula/código de identificação único
         email: Email do usuário (opcional)
-        face_encoding: Encoding facial serializado (JSON string)
-        foto_path: Caminho para a foto de referência
-        ativo: Flag indicando se o usuário está ativo no sistema
+        foto_path: Caminho para a pasta de fotos de referência
+        ativo: Flag indicando se o usuário está ativo no sistema (padrão: True)
         criado_em: Data e hora de criação do registro
         atualizado_em: Data e hora da última atualização
     """
@@ -32,7 +32,7 @@ class Usuario(Base):
     matricula = Column(String(50), unique=True, nullable=False, index=True)
     email = Column(String(255), unique=True, nullable=True)
     foto_path = Column(String(500), nullable=True)
-    ativo = Column(Boolean, default=True, nullable=False)
+    ativo = Column(Boolean, default=True, nullable=False, server_default='1')
     criado_em = Column(DateTime, default=datetime.utcnow, nullable=False)
     atualizado_em = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
     

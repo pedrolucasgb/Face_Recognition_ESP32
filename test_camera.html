@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste de Câmera</title>
+    <style>
+        body { font-family: Arial; padding: 20px; max-width: 800px; margin: 0 auto; }
+        video { width: 100%; max-width: 640px; border: 2px solid #333; border-radius: 8px; }
+        button { padding: 10px 20px; margin: 5px; font-size: 16px; cursor: pointer; }
+        .info { background: #f0f0f0; padding: 15px; border-radius: 5px; margin: 10px 0; }
+        .error { background: #ffebee; color: #c62828; }
+        .success { background: #e8f5e9; color: #2e7d32; }
+        pre { background: #263238; color: #aed581; padding: 10px; border-radius: 4px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🎥 Teste de Acesso à Câmera</h1>
+    
+    <div class="info">
+        <strong>Objetivo:</strong> Verificar se seu navegador consegue acessar a câmera corretamente.
+    </div>
+
+    <div id="status" class="info">
+        Aguardando início do teste...
+    </div>
+
+    <video id="video" autoplay playsinline></video>
+    
+    <div style="margin: 20px 0;">
+        <button onclick="testCamera()">Testar Câmera</button>
+        <button onclick="listDevices()">Listar Dispositivos</button>
+        <button onclick="stopCamera()">Parar Câmera</button>
+    </div>
+
+    <div id="devices-info"></div>
+    <div id="error-info"></div>
+
+    <h3>Console de Debug:</h3>
+    <pre id="console-output"></pre>
+
+    <script>
+        const video = document.getElementById('video');
+        const statusDiv = document.getElementById('status');
+        const devicesDiv = document.getElementById('devices-info');
+        const errorDiv = document.getElementById('error-info');
+        const consoleOutput = document.getElementById('console-output');
+        let currentStream = null;
+
+        function log(msg) {
+            console.log(msg);
+            consoleOutput.textContent += msg + '\n';
+            consoleOutput.scrollTop = consoleOutput.scrollHeight;
+        }
+
+        // Verifica suporte
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            statusDiv.className = 'info error';
+            statusDiv.innerHTML = '<strong>ERRO:</strong> Seu navegador não suporta acesso à câmera (getUserMedia não disponível)';
+            log('❌ getUserMedia não disponível neste navegador');
+        } else {
+            log('✅ getUserMedia está disponível');
+        }
+
+        // Detecta tipo de dispositivo
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        log(`Dispositivo detectado: ${isMobile ? 'MOBILE' : 'DESKTOP'}`);
+        log(`User Agent: ${navigator.userAgent}`);
+
+        async function listDevices() {
+            try {
+                log('\n🔍 Listando dispositivos...');
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const videoDevices = devices.filter(d => d.kind === 'videoinput');
+                
+                log(`Total de dispositivos: ${devices.length}`);
+                log(`Câmeras de vídeo: ${videoDevices.length}`);
+                
+                devicesDiv.className = 'info success';
+                devicesDiv.innerHTML = '<h3>Dispositivos Encontrados:</h3>';
+                
+                if (videoDevices.length === 0) {
+                    devicesDiv.innerHTML += '<p>❌ Nenhuma câmera encontrada</p>';
+                    log('❌ Nenhuma câmera encontrada');
+                } else {
+                    videoDevices.forEach((device, index) => {
+                        devicesDiv.innerHTML += `
+                            <div style="padding: 10px; border-left: 3px solid #4caf50; margin: 5px 0;">
+                                <strong>Câmera ${index + 1}</strong><br>
+                                Label: ${device.label || 'Sem nome'}<br>
+                                ID: ${device.deviceId}<br>
+                                Group ID: ${device.groupId}
+                            </div>
+                        `;
+                        log(`📹 Câmera ${index + 1}: ${device.label || 'Sem nome'} (${device.deviceId})`);
+                    });
+                }
+            } catch (err) {
+                log(`❌ Erro ao listar dispositivos: ${err.name} - ${err.message}`);
+                devicesDiv.className = 'info error';
+                devicesDiv.innerHTML = `<strong>Erro:</strong> ${err.message}`;
+            }
+        }
+
+        async function testCamera() {
+            try {
+                log('\n🎬 Iniciando teste de câmera...');
+                statusDiv.className = 'info';
+                statusDiv.innerHTML = '⏳ Solicitando acesso à câmera...';
+                
+                // Para stream anterior se existir
+                if (currentStream) {
+                    currentStream.getTracks().forEach(track => track.stop());
+                }
+
+                // Tenta primeiro com configuração básica
+                log('Tentando: { video: true }');
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                
+                currentStream = stream;
+                video.srcObject = stream;
+                await video.play();
+                
+                const track = stream.getVideoTracks()[0];
+                const settings = track.getSettings();
+                
+                log('✅ Câmera acessada com sucesso!');
+                log(`Configurações: ${JSON.stringify(settings, null, 2)}`);
+                
+                statusDiv.className = 'info success';
+                statusDiv.innerHTML = `
+                    <strong>✅ Câmera funcionando!</strong><br>
+                    Resolução: ${settings.width}x${settings.height}<br>
+                    FPS: ${settings.frameRate || 'N/A'}<br>
+                    Facing Mode: ${settings.facingMode || 'N/A'}<br>
+                    Device ID: ${settings.deviceId || 'N/A'}
+                `;
+                
+                errorDiv.innerHTML = '';
+                
+            } catch (err) {
+                log(`❌ ERRO: ${err.name} - ${err.message}`);
+                statusDiv.className = 'info error';
+                statusDiv.innerHTML = `<strong>❌ Falha ao acessar câmera</strong>`;
+                
+                errorDiv.className = 'info error';
+                errorDiv.innerHTML = `
+                    <h3>Detalhes do Erro:</h3>
+                    <strong>Nome:</strong> ${err.name}<br>
+                    <strong>Mensagem:</strong> ${err.message}<br>
+                    <strong>Stack:</strong><br><pre>${err.stack || 'N/A'}</pre>
+                `;
+                
+                // Dicas de solução
+                if (err.name === 'NotAllowedError') {
+                    errorDiv.innerHTML += '<p><strong>Solução:</strong> Você negou a permissão. Clique no ícone de câmera na barra de endereço e permita o acesso.</p>';
+                } else if (err.name === 'NotFoundError') {
+                    errorDiv.innerHTML += '<p><strong>Solução:</strong> Nenhuma câmera foi encontrada. Verifique se há uma câmera conectada.</p>';
+                } else if (err.name === 'NotReadableError') {
+                    errorDiv.innerHTML += '<p><strong>Solução:</strong> A câmera está sendo usada por outro aplicativo. Feche outros programas que possam estar usando a câmera.</p>';
+                } else if (err.name === 'SecurityError') {
+                    errorDiv.innerHTML += '<p><strong>Solução:</strong> Acesso bloqueado por segurança. Use HTTPS ou localhost.</p>';
+                }
+            }
+        }
+
+        function stopCamera() {
+            if (currentStream) {
+                log('\n⏹️ Parando câmera...');
+                currentStream.getTracks().forEach(track => track.stop());
+                video.srcObject = null;
+                currentStream = null;
+                statusDiv.className = 'info';
+                statusDiv.innerHTML = 'Câmera parada.';
+                log('✅ Câmera parada');
+            } else {
+                log('⚠️ Nenhuma câmera ativa para parar');
+            }
+        }
+
+        // Auto-testa ao carregar
+        window.addEventListener('load', () => {
+            log('=== TESTE DE CÂMERA INICIADO ===\n');
+            setTimeout(() => {
+                listDevices();
+            }, 500);
+        });
+    </script>
+</body>
+</html>

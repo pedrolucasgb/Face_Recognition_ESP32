@@ -34,7 +34,11 @@
         }
 
         .video-wrap { border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: #000; }
-        #video-stream { display: block; width: 100%; height: auto; }
+        #video-stream { display: block; width: 100%; height: auto; transform: scaleX(-1); }
+        .camera-status { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.7); color: #fff; padding: 6px 12px; border-radius: 4px; font-size: 12px; z-index: 10; }
+        .camera-status.loading { background: rgba(255,152,0,0.9); }
+        .camera-status.active { background: rgba(76,175,80,0.9); }
+        .camera-status.error { background: rgba(244,67,54,0.9); }
 
         .instructions { margin-top: 16px; color: var(--gray-500); }
         .instructions h3 { font-size: 16px; margin-bottom: 8px; color: var(--gray-700); }
@@ -89,8 +93,10 @@
 
     <main class="container">
         <section class="panel">
-            <div class="video-wrap">
-                <img id="video-stream" src="{{ url_for('video_feed') }}" alt="Exibição da câmera">
+            <div class="video-wrap" style="position: relative;">
+                <div class="camera-status loading" id="camera-status">Inicializando câmera...</div>
+                <video id="video-stream" autoplay playsinline></video>
+                <canvas id="canvas" style="display:none;"></canvas>
             </div>
 
             <div class="instructions">
@@ -134,11 +140,321 @@
     </footer>
 
     <script>
-        // Fallback caso o stream falhe
-        document.getElementById('video-stream').onerror = function() {
-            this.alt = 'Não foi possível acessar a câmera.';
-            this.style.background = '#111';
-        };
+        // Inicializa câmera do dispositivo
+        const video = document.getElementById('video-stream');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        let isProcessing = false;
+
+        // Detecta sistema operacional e navegador
+        const userAgent = navigator.userAgent;
+        const isAndroid = /Android/i.test(userAgent);
+        const isIOS = /iPhone|iPad|iPod/i.test(userAgent);
+        const isMobile = isAndroid || isIOS || /webOS|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
+        const isChrome = /Chrome/i.test(userAgent) && /Google Inc/.test(navigator.vendor);
+        const isSafari = /Safari/i.test(userAgent) && /Apple Computer/.test(navigator.vendor);
+        
+        // Verifica se está usando HTTPS (obrigatório para mobile)
+        const isSecure = window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        
+        console.log('=== INFO DO DISPOSITIVO ===');
+        console.log(`📱 Mobile: ${isMobile}`);
+        console.log(`🤖 Android: ${isAndroid}`);
+        console.log(`🍎 iOS: ${isIOS}`);
+        console.log(`🌐 Navegador: ${isChrome ? 'Chrome' : isSafari ? 'Safari' : 'Outro'}`);
+        console.log(`🔒 HTTPS: ${isSecure}`);
+        console.log(`🌍 URL: ${window.location.href}`);
+        
+        if (isMobile && !isSecure) {
+            console.warn('⚠️ AVISO: Mobile requer HTTPS para acesso à câmera!');
+            console.warn('💡 Use ngrok ou acesse via HTTPS');
+        }
+
+        // Lista câmeras disponíveis (para debug)
+        async function listCameras() {
+            try {
+                console.log('🔍 Verificando dispositivos de mídia...');
+                
+                if (!navigator.mediaDevices) {
+                    console.error('❌ navigator.mediaDevices não está disponível');
+                    return [];
+                }
+                
+                if (!navigator.mediaDevices.enumerateDevices) {
+                    console.error('❌ enumerateDevices não está disponível');
+                    return [];
+                }
+                
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const videoDevices = devices.filter(d => d.kind === 'videoinput');
+                
+                console.log(`✅ Total de dispositivos: ${devices.length}`);
+                console.log(`📹 Câmeras de vídeo: ${videoDevices.length}`);
+                
+                if (videoDevices.length > 0) {
+                    videoDevices.forEach((device, index) => {
+                        console.log(`  📹 Câmera ${index + 1}: ${device.label || 'Sem nome'}`);
+                    });
+                } else {
+                    console.warn('⚠️ Nenhuma câmera encontrada. Pode ser necessário dar permissão primeiro.');
+                }
+                
+                return videoDevices;
+            } catch (err) {
+                console.error('❌ Erro ao listar câmeras:', err.name, '-', err.message);
+                return [];
+            }
+        }
+
+        // Configuração da câmera
+        async function initCamera() {
+            const statusEl = document.getElementById('camera-status');
+            
+            // Verifica suporte
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                console.error('getUserMedia não disponível');
+                statusEl.textContent = '✗ Navegador não suporta câmera';
+                statusEl.className = 'camera-status error';
+                video.style.display = 'none';
+                const errorMsg = document.createElement('div');
+                errorMsg.style.padding = '20px';
+                errorMsg.style.color = '#b00020';
+                errorMsg.style.textAlign = 'center';
+                errorMsg.innerHTML = `
+                    <strong>Navegador não suporta acesso à câmera</strong><br>
+                    <small>Use Chrome, Firefox ou Safari atualizado</small>
+                `;
+                document.querySelector('.video-wrap').appendChild(errorMsg);
+                return;
+            }
+            
+            // Verifica HTTPS em mobile
+            if (isMobile && !isSecure) {
+                console.error('❌ Mobile requer HTTPS!');
+                statusEl.textContent = '✗ HTTPS necessário';
+                statusEl.className = 'camera-status error';
+                video.style.display = 'none';
+                const errorMsg = document.createElement('div');
+                errorMsg.style.padding = '20px';
+                errorMsg.style.color = '#b00020';
+                errorMsg.style.textAlign = 'center';
+                errorMsg.innerHTML = `
+                    <strong>HTTPS obrigatório para câmera no celular</strong><br>
+                    <small>Acesse via HTTPS ou use ferramentas como ngrok</small><br>
+                    <small style="margin-top:10px; display:block;">URL atual: ${window.location.href}</small>
+                `;
+                document.querySelector('.video-wrap').appendChild(errorMsg);
+                return;
+            }
+            
+            try {
+                statusEl.textContent = 'Solicitando permissão...';
+                statusEl.className = 'camera-status loading';
+                
+                console.log('🎥 Iniciando acesso à câmera...');
+                console.log(`📱 Dispositivo: ${isMobile ? 'MOBILE' : 'DESKTOP'}`);
+                
+                let constraints;
+                
+                if (isMobile) {
+                    // Mobile: configurações específicas por plataforma
+                    if (isIOS) {
+                        // iOS - configuração específica
+                        constraints = {
+                            video: {
+                                facingMode: 'user',
+                                width: { ideal: 640, max: 1280 },
+                                height: { ideal: 480, max: 720 }
+                            },
+                            audio: false
+                        };
+                        console.log('🍎 Usando configuração iOS');
+                    } else {
+                        // Android
+                        constraints = {
+                            video: {
+                                facingMode: { exact: 'user' },
+                                width: { ideal: 1280 },
+                                height: { ideal: 720 }
+                            },
+                            audio: false
+                        };
+                        console.log('🤖 Usando configuração Android');
+                    }
+                } else {
+                    // Desktop: usa qualquer câmera disponível
+                    constraints = {
+                        video: {
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 }
+                        },
+                        audio: false
+                    };
+                    console.log('💻 Usando configuração DESKTOP (câmera padrão)');
+                }
+                
+                console.log('⏳ Aguardando permissão do usuário...');
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = stream;
+                await video.play();
+                
+                const track = stream.getVideoTracks()[0];
+                const settings = track.getSettings();
+                console.log('✅ Câmera inicializada com sucesso!');
+                console.log(`📐 Resolução: ${settings.width}x${settings.height}`);
+                console.log(`🎬 FPS: ${settings.frameRate || 'N/A'}`);
+                
+                statusEl.textContent = '✓ Câmera ativa';
+                statusEl.className = 'camera-status active';
+                setTimeout(() => statusEl.style.display = 'none', 3000);
+                
+                console.log('Câmera inicializada com sucesso');
+                startFrameProcessing();
+                
+            } catch (err) {
+                console.error('❌ ERRO ao acessar câmera:', err.name, '-', err.message);
+                statusEl.textContent = `Erro: ${err.name}`;
+                statusEl.className = 'camera-status error';
+                
+                // Tenta fallback com configurações mínimas
+                try {
+                    console.log('🔄 Tentando configuração alternativa (fallback)...');
+                    statusEl.textContent = 'Tentando modo básico...';
+                    statusEl.className = 'camera-status loading';
+                    
+                    let fallbackConstraints;
+                    
+                    // Para mobile, tenta sem 'exact'
+                    if (isMobile) {
+                        fallbackConstraints = {
+                            video: {
+                                facingMode: 'user',
+                                width: { ideal: 640 },
+                                height: { ideal: 480 }
+                            },
+                            audio: false
+                        };
+                        console.log('📱 Tentando mobile com resolução menor...');
+                    } else {
+                        fallbackConstraints = { 
+                            video: true,
+                            audio: false
+                        };
+                        console.log('💻 Tentando desktop modo básico...');
+                    }
+                    
+                    const stream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+                    video.srcObject = stream;
+                    await video.play();
+                    
+                    const track = stream.getVideoTracks()[0];
+                    const settings = track.getSettings();
+                    console.log('✅ Câmera inicializada com configuração básica!');
+                    console.log(`📐 Resolução: ${settings.width}x${settings.height}`);
+                    
+                    statusEl.textContent = '✓ Câmera ativa (modo básico)';
+                    statusEl.className = 'camera-status active';
+                    setTimeout(() => statusEl.style.display = 'none', 3000);
+                    
+                    console.log('Câmera inicializada com configuração básica');
+                    startFrameProcessing();
+                } catch (fallbackErr) {
+                    console.error('❌ FALHA COMPLETA:', fallbackErr.name, '-', fallbackErr.message);
+                    
+                    // Última tentativa: apenas video: true
+                    try {
+                        console.log('🔄 Última tentativa: configuração mínima absoluta...');
+                        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                        video.srcObject = stream;
+                        await video.play();
+                        
+                        console.log('✅ Funcionou com configuração mínima!');
+                        statusEl.textContent = '✓ Câmera ativa';
+                        statusEl.className = 'camera-status active';
+                        setTimeout(() => statusEl.style.display = 'none', 3000);
+                        startFrameProcessing();
+                    } catch (finalErr) {
+                        console.error('❌ TODAS AS TENTATIVAS FALHARAM:', finalErr.name, '-', finalErr.message);
+                        video.style.display = 'none';
+                        statusEl.textContent = '✗ Falha ao acessar câmera';
+                        statusEl.className = 'camera-status error';
+                        
+                        const errorMsg = document.createElement('div');
+                        errorMsg.style.padding = '20px';
+                        errorMsg.style.color = '#b00020';
+                        errorMsg.style.textAlign = 'center';
+                        
+                        let errorDetails = `<strong>Não foi possível acessar a câmera</strong><br>`;
+                        errorDetails += `<small><strong>Erro:</strong> ${finalErr.name}</small><br>`;
+                        errorDetails += `<small>${finalErr.message}</small><br>`;
+                        
+                        if (finalErr.name === 'NotAllowedError') {
+                            errorDetails += `<br><strong>Solução:</strong> Permita o acesso à câmera nas configurações do navegador`;
+                        } else if (finalErr.name === 'NotFoundError') {
+                            errorDetails += `<br><strong>Solução:</strong> Nenhuma câmera encontrada`;
+                        } else if (finalErr.name === 'NotReadableError') {
+                            errorDetails += `<br><strong>Solução:</strong> Câmera em uso por outro app. Feche outros aplicativos.`;
+                        } else if (finalErr.name === 'OverconstrainedError') {
+                            errorDetails += `<br><strong>Solução:</strong> Configuração não suportada pela câmera`;
+                        }
+                        
+                        if (isMobile && !isSecure) {
+                            errorDetails += `<br><br><strong style="color:#d32f2f;">⚠️ Mobile requer HTTPS!</strong>`;
+                        }
+                        
+                        errorDetails += `<br><small style="display:block; margin-top:10px;">Abra o Console (F12) para mais detalhes</small>`;
+                        
+                        errorMsg.innerHTML = errorDetails;
+                        document.querySelector('.video-wrap').appendChild(errorMsg);
+                    }
+                }
+            }
+        }
+
+        // Inicia câmera
+        // Aguarda o DOM estar completamente carregado
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => {
+                setTimeout(() => listCameras().then(() => initCamera()), 100);
+            });
+        } else {
+            setTimeout(() => listCameras().then(() => initCamera()), 100);
+        }
+
+        // Envia frames para processamento
+        async function startFrameProcessing() {
+            setInterval(async () => {
+                if (isProcessing || !video.videoWidth || !video.videoHeight) return;
+                isProcessing = true;
+
+                try {
+                    // Captura frame do vídeo
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    ctx.drawImage(video, 0, 0);
+                    
+                    // Converte para base64
+                    const frameData = canvas.toDataURL('image/jpeg', 0.8);
+
+                    // Envia para servidor
+                    const response = await fetch('/api/process_frame', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ frame: frameData })
+                    });
+
+                    const data = await response.json();
+                    
+                    if (!data.success) {
+                        console.error('Erro ao processar frame:', data.message);
+                    }
+                } catch (err) {
+                    console.error('Erro ao processar frame:', err);
+                } finally {
+                    isProcessing = false;
+                }
+            }, 100); // Processa ~10 fps
+        }
 
         // Modal helpers
         const modal = document.getElementById('confirm-modal');
@@ -177,19 +493,38 @@
             if(!detCache){ return; }
             try{
                 mStatus.textContent = 'Registrando...';
+                const btnConfirm = document.getElementById('btn-confirmar');
+                const btnCancel = document.getElementById('btn-cancelar');
+                btnConfirm.disabled = true; btnCancel.disabled = true;
                 const r = await fetch('/api/confirmar_ponto', {
                     method:'POST', headers:{'Content-Type':'application/json'},
                     body: JSON.stringify({ cpf: detCache.cpf, confidence: detCache.confidence, detection_id: detCache.detection_id })
                 });
-                const resp = await r.json();
-                if(resp.success){
+                if(!r.ok){
+                    const text = await r.text();
+                    mStatus.textContent = `Falha (${r.status}). ${text || 'Resposta inválida do servidor.'}`;
+                    btnConfirm.disabled = false; btnCancel.disabled = false;
+                    return;
+                }
+                let resp;
+                try { resp = await r.json(); }
+                catch(parseErr){
+                    mStatus.textContent = 'Resposta inválida do servidor (JSON).';
+                    btnConfirm.disabled = false; btnCancel.disabled = false;
+                    return;
+                }
+                if(resp && resp.success){
                     mStatus.textContent = 'Ponto registrado com sucesso!';
                     setTimeout(closeModal, 1000);
                 }else{
-                    mStatus.textContent = resp.message || 'Falha ao registrar ponto.';
+                    mStatus.textContent = (resp && resp.message) ? resp.message : 'Falha ao registrar ponto.';
+                    btnConfirm.disabled = false; btnCancel.disabled = false;
                 }
             }catch(err){
-                mStatus.textContent = 'Erro de comunicação.';
+                mStatus.textContent = 'Problema de conexão ao enviar dados.';
+                const btnConfirm = document.getElementById('btn-confirmar');
+                const btnCancel = document.getElementById('btn-cancelar');
+                btnConfirm.disabled = false; btnCancel.disabled = false;
             }
         };
     </script>
