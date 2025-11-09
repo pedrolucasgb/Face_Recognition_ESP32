@@ -216,7 +216,7 @@ database.db
 # alembic/versions/*.py
 
 # Face images e dados sensíveis
-rostos/*/
+constants/rostos/*/
 registros/
 pontos_registrados.json
 
