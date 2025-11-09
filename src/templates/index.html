@@ -1,93 +1,10 @@
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Reconhecimento Facial para Ponto dos voluntários do hospital do Cajuru</title>
-    <style>
-        :root {
-            --red: #b00020;
-            --red-dark: #8a0019;
-            --gray-700: #2d2d2d;
-            --gray-500: #666;
-            --border: #e6e6e6;
-        }
-
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: Arial, Helvetica, sans-serif; background: #ffffff; color: var(--gray-700); }
-
-        .header {
-            width: 100%;
-            background: var(--red);
-            color: #fff;
-            padding: 16px 24px;
-        }
-        .header .title { max-width: 1100px; margin: 0 auto; font-size: 20px; font-weight: 600; }
-
-        .container { max-width: 1100px; margin: 24px auto; padding: 0 16px 32px; }
-
-        .panel {
-            background: #fff;
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            padding: 16px;
-        }
-
-    .video-wrap { position: relative; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: #000; }
-    #video-stream { display: block; width: 100%; height: auto; transform: scaleX(-1); }
-    #processed-frame { position:absolute; top:0; left:0; width:100%; height:auto; display:block; transform: scaleX(-1); pointer-events:none; }
-        .camera-status { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.7); color: #fff; padding: 6px 12px; border-radius: 4px; font-size: 12px; z-index: 10; }
-        .camera-status.loading { background: rgba(255,152,0,0.9); }
-        .camera-status.active { background: rgba(76,175,80,0.9); }
-        .camera-status.error { background: rgba(244,67,54,0.9); }
-    /* Estabilidade visual */
-    .stability-wrap { position:absolute; left:0; right:0; bottom:0; padding:10px 12px; z-index:11; display:none; }
-    .stability { background: rgba(255,255,255,0.9); border-radius:6px; padding:8px 10px; box-shadow:0 2px 8px rgba(0,0,0,.15); }
-    .stability .bar { width:100%; height:8px; background:#eee; border-radius:5px; overflow:hidden; margin-top:6px; }
-    .stability .bar .fill { height:100%; width:0%; background:linear-gradient(90deg, #43a047, #66bb6a); transition: width .12s linear; }
-    .stability .text { font-size:12px; color:#2d2d2d; }
-
-        .instructions { margin-top: 16px; color: var(--gray-500); }
-        .instructions h3 { font-size: 16px; margin-bottom: 8px; color: var(--gray-700); }
-        .instructions ul { margin-left: 18px; line-height: 1.6; }
-
-        .actions { margin-top: 20px; display: flex; gap: 12px; }
-        .btn {
-            display: inline-block;
-            padding: 10px 16px;
-            border-radius: 4px;
-            text-decoration: none;
-            border: 1px solid var(--red);
-            color: #fff;
-            background: var(--red);
-        }
-        .btn:hover { background: var(--red-dark); border-color: var(--red-dark); }
-
-        .footer {
-            width: 100%;
-            background: var(--red);
-            color: #fff;
-            padding: 12px 24px;
-            position: sticky;
-            top: 100%;
-            margin-top: 24px;
-        }
-        .footer .inner { max-width: 1100px; margin: 0 auto; font-size: 13px; opacity: .9; }
-
-        @media (max-width: 640px) {
-            .header .title { font-size: 18px; }
-        }
-
-        /* Modal de confirmação */
-        .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: none; align-items: center; justify-content: center; z-index: 1000; }
-        .modal { background: #fff; width: 95%; max-width: 520px; border-radius: 8px; border: 1px solid var(--border); box-shadow: 0 10px 30px rgba(0,0,0,.25); }
-        .modal header { padding: 14px 16px; border-bottom: 1px solid var(--border); font-weight: 600; }
-        .modal .content { padding: 16px; color: var(--gray-700); }
-        .modal .row { margin-bottom: 8px; font-size: 14px; }
-        .modal .muted { color: var(--gray-500); font-size: 13px; }
-        .modal footer { padding: 12px 16px; border-top: 1px solid var(--border); display: flex; gap: 10px; justify-content: flex-end; }
-        .btn.secondary { background: #fff; color: var(--red); }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/app.css') }}" />
     <meta name="color-scheme" content="light">
     <meta name="theme-color" content="#b00020">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
@@ -97,7 +14,6 @@
     <header class="header">
         <div class="title">Reconhecimento Facial para Ponto dos voluntários do hospital do Cajuru</div>
     </header>
-
     <main class="container">
         <section class="panel">
             <div class="video-wrap" style="position: relative;">

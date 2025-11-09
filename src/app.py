@@ -10,6 +10,10 @@ from datetime import datetime
 from models.db import get_db, init_db
 from models.models import Usuario, PontoUsuario
 from services.face_recognition_service import get_face_service
+from constants.config import ESP32_CAM_URL as CFG_ESP32_CAM_URL
+from urllib.parse import urlparse, urlunparse
+from urllib.request import urlopen, Request
+import socket
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key'
@@ -96,6 +100,58 @@ def index():
 def registro():
     """Página de registro de novos usuários"""
     return render_template('registro.html')
+
+
+@app.route('/espcam')
+def index_espcam():
+    """Página de visualização da ESP32-CAM (stream estático)."""
+    return render_template('index_espcam.html', stream_url=CFG_ESP32_CAM_URL)
+
+
+@app.route('/registro_espcam')
+def registro_espcam():
+    """Página de registro usando stream da ESP32-CAM (somente exibição do stream)."""
+    return render_template('registro_espcam.html', stream_url=CFG_ESP32_CAM_URL)
+
+
+def _derive_snapshot_url(stream_url: str) -> str:
+    """Deriva a URL de snapshot (/capture) a partir da URL do stream fornecida.
+    Convenções usuais do firmware da Arduino (CameraWebServer):
+      - Página HTML: http://IP/
+      - Snapshot:    http://IP/capture (porta 80)
+      - Stream MJPEG:http://IP:81/stream (porta 81)
+    """
+    try:
+        p = urlparse(stream_url)
+        # Base host (sem porta 81)
+        host = p.hostname or 'localhost'
+        scheme = p.scheme or 'http'
+        # Se porta é 81, snapshot costuma estar no 80
+        netloc = host
+        if p.port and p.port != 80:
+            # Assume snapshot na 80
+            netloc = host
+        # Caminho padrão do snapshot
+        snapshot_path = '/capture'
+        return urlunparse((scheme, netloc, snapshot_path, '', '', ''))
+    except Exception:
+        # Fallback simples
+        return stream_url.rstrip('/') + '/capture'
+
+
+@app.route('/api/espcam/snapshot')
+def api_espcam_snapshot():
+    """Proxy de snapshot para ESP32-CAM. Evita CORS no browser.
+    Retorna image/jpeg.
+    """
+    url = _derive_snapshot_url(CFG_ESP32_CAM_URL)
+    try:
+        req = Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urlopen(req, timeout=3) as resp:
+            data = resp.read()
+            return Response(data, mimetype='image/jpeg')
+    except (Exception, socket.timeout) as e:
+        return jsonify({'success': False, 'message': f'ESP32 snapshot indisponível: {str(e)}'}), 502
 
 
 # ==================== ROTAS DE VÍDEO ====================

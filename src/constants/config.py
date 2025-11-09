@@ -3,6 +3,13 @@ Configurações do sistema de reconhecimento facial
 """
 import os
 from typing import Optional
+try:
+	# Carrega variáveis do arquivo .env, se existir
+	from dotenv import load_dotenv  # type: ignore
+	load_dotenv()
+except Exception:
+	# Se python-dotenv não estiver disponível, segue com variáveis de ambiente do SO
+	pass
 
 # Configuração do ESP32-CAM
 ESP32_CAM_ENABLED = os.getenv('ESP32_CAM_ENABLED', 'false').lower() == 'true'
