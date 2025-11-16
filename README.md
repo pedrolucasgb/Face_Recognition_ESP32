@@ -24,7 +24,6 @@ O backend usa Flask + OpenCV e um modelo LBPH para reconhecimento. O frontend se
 - [Captura e Armazenamento de Imagens](#captura-e-armazenamento-de-imagens)
 - [Treinamento do Modelo](#treinamento-do-modelo)
 - [Endpoints de Diagnóstico e Ajuste](#endpoints-de-diagnóstico-e-ajuste)
-- [Boas Práticas e Expansão](#boas-práticas-e-expansão)
 - [Expondo com ngrok (proxy reverso)](#expondo-com-ngrok-proxy-reverso)
 
 ---
@@ -208,16 +207,6 @@ Arquivo: `src/constants/config.py`
 | `GET /api/predict_now` | Predição rápida no frame atual (debug) |
 | `POST /api/ajustar_limite` | Ajusta threshold LBPH |
 | `POST /api/ajustar_tempos` | Ajusta estabilidade e cooldown |
-
----
-## Boas Práticas e Expansão
-
-- Melhorar variabilidade de expressões e ângulos no cadastro para robustez.
-- Adicionar verificação de qualidade (luminosidade, foco) antes de aceitar captura.
-- Migrar para modelos mais modernos (Ex: FaceNet, ArcFace) se necessário maior precisão.
-- Persistir metadata de cada imagem (ex: data, origem) em banco se for preciso auditoria.
-- Adicionar autenticação e autorização para proteger endpoints de ajuste.
-- Usar WebSocket para reduzir polling e latência do modal de reconhecimento.
 
 ---
 ## Expondo com ngrok (proxy reverso)
