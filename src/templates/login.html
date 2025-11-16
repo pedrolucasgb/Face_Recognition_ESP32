@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Login - Sistema de Ponto</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/app.css') }}" />
+    <meta name="color-scheme" content="light">
+</head>
+<body data-page="login">
+    <header class="header">
+        <div class="title">Sistema de Ponto — Login</div>
+    </header>
+    <main class="container">
+        <div class="grid" style="grid-template-columns: 1fr; max-width: 400px; margin: 0 auto;">
+            <section class="panel">
+                <h2>Login</h2>
+                <form id="form-login" method="POST">
+                    <div class="group">
+                        <label for="username">Usuário *</label>
+                        <input id="username" name="username" required placeholder="Seu nome de usuário" />
+                    </div>
+                    <div class="group">
+                        <label for="password">Senha *</label>
+                        <input id="password" name="password" type="password" required placeholder="Sua senha" />
+                    </div>
+                    <div class="actions">
+                        <button class="btn" type="submit">Entrar</button>
+                        <a class="btn secondary" href="{{ url_for('registro_usuario') }}">Criar conta</a>
+                    </div>
+                </form>
+                <div id="status-messages"></div>
+                <div style="margin-top: 16px;">
+                    <a href="{{ url_for('index') }}" class="btn secondary">Voltar para reconhecimento</a>
+                </div>
+            </section>
+        </div>
+    </main>
+    <footer class="footer">
+        <div class="inner">Hospital do Cajuru — Sistema de login</div>
+    </footer>
+    <script>
+        // Handle login form
+        document.getElementById('form-login').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            const data = Object.fromEntries(formData);
+            
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                const statusBox = document.getElementById('status-messages');
+                
+                if (result.success) {
+                    statusBox.innerHTML = '<div class="status success">Login realizado com sucesso! Redirecionando...</div>';
+                    setTimeout(() => {
+                        window.location.href = result.redirect_url || '/dashboard';
+                    }, 1000);
+                } else {
+                    statusBox.innerHTML = `<div class="status error">${result.message}</div>`;
+                }
+            } catch (error) {
+                document.getElementById('status-messages').innerHTML = '<div class="status error">Erro de comunicação com o servidor</div>';
+            }
+        });
+    </script>
+</body>
+</html>

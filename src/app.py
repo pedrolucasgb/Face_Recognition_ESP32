@@ -1,22 +1,25 @@
 """
 Aplicação Flask para Sistema de Reconhecimento Facial
 """
-from flask import Flask, render_template, Response, jsonify, request
+from flask import Flask, render_template, Response, jsonify, request, session, redirect, url_for
 import cv2
 import numpy as np
 import base64
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from models.db import get_db, init_db
-from models.models import Usuario, PontoUsuario
+from models.models import Usuario, PontoUsuario, UsuarioLogin, TipoUsuario
 from services.face_recognition_service import get_face_service
+from sqlalchemy import func, and_, extract
+from functools import wraps
 from constants.config import ESP32_CAM_URL as CFG_ESP32_CAM_URL
 from urllib.parse import urlparse, urlunparse
 from urllib.request import urlopen, Request
 import socket
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your-secret-key'
+app.config['SECRET_KEY'] = 'face-recognition-secret-key-2025'
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=24)
 
 # Adiciona headers para permitir acesso à câmera
 @app.after_request
@@ -114,6 +117,74 @@ def registro_espcam():
     return render_template('registro_espcam.html', stream_url=CFG_ESP32_CAM_URL)
 
 
+# ==================== AUTENTICAÇÃO ====================
+
+def login_required(f):
+    """Decorator para rotas que exigem login"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+def admin_required(f):
+    """Decorator para rotas que exigem admin"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+        
+        with get_db() as db:
+            user = db.query(UsuarioLogin).filter(UsuarioLogin.id == session['user_id']).first()
+            if not user or not user.is_admin():
+                return jsonify({'success': False, 'message': 'Acesso negado'}), 403
+        
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+@app.route('/visualizar_dados')
+def visualizar_dados():
+    """Redireciona para login se não autenticado, senão para dashboard"""
+    if 'user_id' in session:
+        return redirect(url_for('dashboard'))
+    return redirect(url_for('login'))
+
+
+@app.route('/login')
+def login():
+    """Página de login"""
+    return render_template('login.html')
+
+
+@app.route('/registro_usuario')
+def registro_usuario():
+    """Página de registro de usuário"""
+    return render_template('registro_usuario.html')
+
+
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    """Dashboard do usuário (admin ou padrão)"""
+    with get_db() as db:
+        user = db.query(UsuarioLogin).filter(UsuarioLogin.id == session['user_id']).first()
+        if not user:
+            session.clear()
+            return redirect(url_for('login'))
+        
+        return render_template('dashboard.html', usuario=user)
+
+
+@app.route('/logout')
+def logout():
+    """Logout do usuário"""
+    session.clear()
+    return redirect(url_for('index'))
+
+
 def _derive_snapshot_url(stream_url: str) -> str:
     """Deriva a URL de snapshot (/capture) a partir da URL do stream fornecida.
     Convenções usuais do firmware da Arduino (CameraWebServer):
@@ -158,6 +229,7 @@ def api_espcam_snapshot():
 
 @app.route('/api/process_frame', methods=['POST'])
 def api_process_frame():
+
     """Processa frame enviado pelo cliente para reconhecimento"""
     try:
         data = request.json or {}
@@ -645,6 +717,277 @@ def api_confirmar_ponto():
         # Garante resposta JSON para evitar erro de parse no frontend
         print(f"[confirmar_ponto] Erro inesperado: {e}")
         return jsonify({'success': False, 'message': f'Erro interno ao registrar ponto: {str(e)}'}), 500
+
+
+# ==================== ROTAS DE AUTENTICAÇÃO ====================
+
+@app.route('/api/register', methods=['POST'])
+def api_register():
+    """Registra novo usuário"""
+    try:
+        data = request.json or {}
+        username = data.get('username', '').strip()
+        email = data.get('email', '').strip()
+        password = data.get('password', '').strip()
+        cpf = data.get('cpf', '').strip()
+        
+        if not username or not email or not password:
+            return jsonify({'success': False, 'message': 'Username, email e senha são obrigatórios'}), 400
+        
+        # Limpa CPF se fornecido
+        cpf_clean = ''.join(filter(str.isdigit, cpf)) if cpf else None
+        if cpf_clean and len(cpf_clean) != 11:
+            return jsonify({'success': False, 'message': 'CPF deve ter 11 dígitos'}), 400
+        
+        with get_db() as db:
+            # Verifica se username já existe
+            if db.query(UsuarioLogin).filter(UsuarioLogin.username == username).first():
+                return jsonify({'success': False, 'message': 'Nome de usuário já existe'}), 400
+            
+            # Verifica se email já existe
+            if db.query(UsuarioLogin).filter(UsuarioLogin.email == email).first():
+                return jsonify({'success': False, 'message': 'Email já cadastrado'}), 400
+            
+            # Verifica se CPF já está vinculado
+            if cpf_clean and db.query(UsuarioLogin).filter(UsuarioLogin.cpf == cpf_clean).first():
+                return jsonify({'success': False, 'message': 'CPF já está vinculado a outra conta'}), 400
+            
+            # Cria novo usuário
+            new_user = UsuarioLogin(
+                username=username,
+                email=email,
+                cpf=cpf_clean,
+                tipo=TipoUsuario.DEFAULT
+            )
+            new_user.set_password(password)
+            
+            db.add(new_user)
+            db.commit()
+            
+            return jsonify({'success': True, 'message': 'Conta criada com sucesso'})
+            
+    except Exception as e:
+        print(f"[ERRO] api_register: {e}")
+        return jsonify({'success': False, 'message': 'Erro interno do servidor'}), 500
+
+
+@app.route('/api/login', methods=['POST'])
+def api_login():
+    """Autentica usuário"""
+    try:
+        data = request.json or {}
+        username = data.get('username', '').strip()
+        password = data.get('password', '').strip()
+        
+        if not username or not password:
+            return jsonify({'success': False, 'message': 'Username e senha são obrigatórios'}), 400
+        
+        with get_db() as db:
+            user = db.query(UsuarioLogin).filter(
+                UsuarioLogin.username == username,
+                UsuarioLogin.ativo == True
+            ).first()
+            
+            if not user or not user.check_password(password):
+                return jsonify({'success': False, 'message': 'Credenciais inválidas'}), 401
+            
+            # Atualiza último login
+            user.ultimo_login = datetime.utcnow()
+            db.commit()
+            
+            # Cria sessão
+            session.permanent = True
+            session['user_id'] = user.id
+            session['username'] = user.username
+            session['is_admin'] = user.is_admin()
+            
+            return jsonify({
+                'success': True, 
+                'message': 'Login realizado com sucesso',
+                'redirect_url': '/dashboard'
+            })
+            
+    except Exception as e:
+        print(f"[ERRO] api_login: {e}")
+        return jsonify({'success': False, 'message': 'Erro interno do servidor'}), 500
+
+
+# ==================== ROTAS DO DASHBOARD ====================
+
+@app.route('/api/dashboard/meus-pontos')
+@login_required
+def api_meus_pontos():
+    """Retorna pontos do usuário logado"""
+    try:
+        cpf = request.args.get('cpf')
+        if not cpf:
+            return jsonify({'success': False, 'message': 'CPF não fornecido'}), 400
+        
+        with get_db() as db:
+            # Verifica se o CPF pertence ao usuário logado
+            user = db.query(UsuarioLogin).filter(UsuarioLogin.id == session['user_id']).first()
+            if not user or user.cpf != cpf:
+                return jsonify({'success': False, 'message': 'Acesso negado'}), 403
+            
+            # Busca pontos do usuário
+            usuario = db.query(Usuario).filter(Usuario.cpf == cpf).first()
+            if not usuario:
+                return jsonify({'success': True, 'pontos': []})
+            
+            pontos = db.query(PontoUsuario).filter(
+                PontoUsuario.usuario_id == usuario.id
+            ).order_by(PontoUsuario.data_hora.desc()).limit(100).all()
+            
+            pontos_data = [{
+                'id': p.id,
+                'data_hora': p.data_hora.isoformat(),
+                'confianca': p.confianca,
+                'dispositivo': p.dispositivo
+            } for p in pontos]
+            
+            return jsonify({'success': True, 'pontos': pontos_data})
+            
+    except Exception as e:
+        print(f"[ERRO] api_meus_pontos: {e}")
+        return jsonify({'success': False, 'message': 'Erro interno do servidor'}), 500
+
+
+@app.route('/api/dashboard/ranking')
+@admin_required
+def api_ranking():
+    """Retorna ranking de usuários por horas trabalhadas no mês atual"""
+    try:
+        with get_db() as db:
+            # Mês atual
+            now = datetime.utcnow()
+            inicio_mes = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            
+            # Query complexa para calcular horas trabalhadas
+            # Assume que pontos pares são entrada e ímpares são saída
+            ranking_data = []
+            
+            usuarios = db.query(Usuario).all()
+            for usuario in usuarios:
+                pontos_mes = db.query(PontoUsuario).filter(
+                    PontoUsuario.usuario_id == usuario.id,
+                    PontoUsuario.data_hora >= inicio_mes
+                ).order_by(PontoUsuario.data_hora).all()
+                
+                total_horas = 0
+                # Agrupa por dia
+                pontos_por_dia = {}
+                for ponto in pontos_mes:
+                    dia = ponto.data_hora.date()
+                    if dia not in pontos_por_dia:
+                        pontos_por_dia[dia] = []
+                    pontos_por_dia[dia].append(ponto)
+                
+                # Calcula horas por dia (primeiro e último ponto)
+                for dia, pontos_dia in pontos_por_dia.items():
+                    if len(pontos_dia) >= 2:
+                        entrada = pontos_dia[0].data_hora
+                        saida = pontos_dia[-1].data_hora
+                        diff = saida - entrada
+                        horas = diff.total_seconds() / 3600
+                        total_horas += horas
+                
+                if total_horas > 0:
+                    ranking_data.append({
+                        'nome': usuario.nome,
+                        'cpf': usuario.cpf,
+                        'total_horas': round(total_horas, 2)
+                    })
+            
+            # Ordena por horas decrescente e pega top 5
+            ranking_data.sort(key=lambda x: x['total_horas'], reverse=True)
+            top_5 = ranking_data[:5]
+            
+            return jsonify({'success': True, 'ranking': top_5})
+            
+    except Exception as e:
+        print(f"[ERRO] api_ranking: {e}")
+        return jsonify({'success': False, 'message': 'Erro interno do servidor'}), 500
+
+
+@app.route('/api/dashboard/usuarios-presentes')
+@admin_required
+def api_usuarios_presentes():
+    """Retorna usuários que bateram apenas 1 ponto hoje (estão presentes)"""
+    try:
+        with get_db() as db:
+            hoje = datetime.utcnow().date()
+            inicio_dia = datetime.combine(hoje, datetime.min.time())
+            fim_dia = datetime.combine(hoje, datetime.max.time())
+            
+            presentes = []
+            usuarios = db.query(Usuario).all()
+            
+            for usuario in usuarios:
+                pontos_hoje = db.query(PontoUsuario).filter(
+                    PontoUsuario.usuario_id == usuario.id,
+                    PontoUsuario.data_hora >= inicio_dia,
+                    PontoUsuario.data_hora <= fim_dia
+                ).order_by(PontoUsuario.data_hora).all()
+                
+                # Se tem exatamente 1 ponto, está presente
+                if len(pontos_hoje) == 1:
+                    presentes.append({
+                        'nome': usuario.nome,
+                        'cpf': usuario.cpf,
+                        'ultimo_ponto': pontos_hoje[0].data_hora.isoformat()
+                    })
+            
+            return jsonify({'success': True, 'presentes': presentes})
+            
+    except Exception as e:
+        print(f"[ERRO] api_usuarios_presentes: {e}")
+        return jsonify({'success': False, 'message': 'Erro interno do servidor'}), 500
+
+
+@app.route('/api/dashboard/resumo-todos')
+@admin_required
+def api_resumo_todos():
+    """Retorna resumo de todos os usuários"""
+    try:
+        with get_db() as db:
+            hoje = datetime.utcnow().date()
+            inicio_dia = datetime.combine(hoje, datetime.min.time())
+            fim_dia = datetime.combine(hoje, datetime.max.time())
+            
+            usuarios = db.query(Usuario).all()
+            resumo = []
+            
+            for usuario in usuarios:
+                total_pontos = db.query(PontoUsuario).filter(
+                    PontoUsuario.usuario_id == usuario.id
+                ).count()
+                
+                ultimo_ponto = db.query(PontoUsuario).filter(
+                    PontoUsuario.usuario_id == usuario.id
+                ).order_by(PontoUsuario.data_hora.desc()).first()
+                
+                pontos_hoje = db.query(PontoUsuario).filter(
+                    PontoUsuario.usuario_id == usuario.id,
+                    PontoUsuario.data_hora >= inicio_dia,
+                    PontoUsuario.data_hora <= fim_dia
+                ).count()
+                
+                resumo.append({
+                    'nome': usuario.nome,
+                    'cpf': usuario.cpf,
+                    'total_pontos': total_pontos,
+                    'ultimo_ponto': ultimo_ponto.data_hora.isoformat() if ultimo_ponto else None,
+                    'pontos_hoje': pontos_hoje
+                })
+            
+            # Ordena por nome
+            resumo.sort(key=lambda x: x['nome'])
+            
+            return jsonify({'success': True, 'usuarios': resumo})
+            
+    except Exception as e:
+        print(f"[ERRO] api_resumo_todos: {e}")
+        return jsonify({'success': False, 'message': 'Erro interno do servidor'}), 500
 
 
 # ==================== MAIN ====================

@@ -472,3 +472,21 @@ input:focus {
     border: 1px solid var(--border);
     word-break: break-all
 }
+
+/* Dashboard styles */
+.ranking-item,.presente-item{display:flex;align-items:center;padding:12px;border:1px solid var(--border);border-radius:4px;margin-bottom:8px}
+.ranking-pos{font-weight:bold;font-size:18px;color:var(--red);margin-right:12px;min-width:30px}
+.ranking-info{flex:1}
+.ranking-horas,.presente-entrada{font-weight:bold;color:var(--gray-700)}
+.resumo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+.resumo-card{border:1px solid var(--border);border-radius:6px;padding:16px;background:#fff}
+.resumo-card h4{margin-bottom:8px;color:var(--red)}
+.dia-pontos{border:1px solid var(--border);border-radius:6px;padding:16px;margin-bottom:16px;background:#fff}
+.dia-pontos h4{margin-bottom:12px;color:var(--red)}
+.pontos-lista{margin-bottom:12px}
+.ponto-item{display:flex;align-items:center;padding:8px;border-bottom:1px solid #f0f0f0;gap:12px}
+.ponto-numero{background:var(--red);color:#fff;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:12px}
+.ponto-hora{flex:1;font-weight:500}
+.ponto-conf{font-size:12px;color:var(--muted)}
+.horas-dia{padding:8px;background:#f8f9fa;border-radius:4px;font-weight:bold;text-align:center}
+.loading{padding:20px;text-align:center;color:var(--muted)}

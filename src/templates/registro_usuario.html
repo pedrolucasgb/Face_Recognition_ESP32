@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Criar Conta - Sistema de Ponto</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/app.css') }}" />
+    <meta name="color-scheme" content="light">
+</head>
+<body data-page="register">
+    <header class="header">
+        <div class="title">Sistema de Ponto — Criar Conta</div>
+    </header>
+    <main class="container">
+        <div class="grid" style="grid-template-columns: 1fr; max-width: 400px; margin: 0 auto;">
+            <section class="panel">
+                <h2>Criar Nova Conta</h2>
+                <form id="form-register" method="POST">
+                    <div class="group">
+                        <label for="username">Nome de usuário *</label>
+                        <input id="username" name="username" required placeholder="Escolha um nome de usuário" />
+                    </div>
+                    <div class="group">
+                        <label for="email">Email *</label>
+                        <input id="email" name="email" type="email" required placeholder="seu@email.com" />
+                    </div>
+                    <div class="group">
+                        <label for="cpf">CPF (opcional)</label>
+                        <input id="cpf" name="cpf" maxlength="14" placeholder="000.000.000-00" />
+                        <small class="muted">Se você é voluntário, informe seu CPF para vincular aos dados de ponto</small>
+                    </div>
+                    <div class="group">
+                        <label for="password">Senha *</label>
+                        <input id="password" name="password" type="password" required placeholder="Escolha uma senha" />
+                    </div>
+                    <div class="group">
+                        <label for="confirm_password">Confirmar senha *</label>
+                        <input id="confirm_password" name="confirm_password" type="password" required placeholder="Repita a senha" />
+                    </div>
+                    <div class="actions">
+                        <button class="btn" type="submit">Criar conta</button>
+                        <a class="btn secondary" href="{{ url_for('login') }}">Já tenho conta</a>
+                    </div>
+                </form>
+                <div id="status-messages"></div>
+                <div style="margin-top: 16px;">
+                    <a href="{{ url_for('index') }}" class="btn secondary">Voltar para reconhecimento</a>
+                </div>
+            </section>
+        </div>
+    </main>
+    <footer class="footer">
+        <div class="inner">Hospital do Cajuru — Criar conta</div>
+    </footer>
+    <script>
+        // CPF mask
+        const cpfInput = document.getElementById('cpf');
+        cpfInput.addEventListener('input', e => {
+            let v = e.target.value.replace(/\D/g,'').slice(0,11);
+            v = v.replace(/(\d{3})(\d)/, '$1.$2');
+            v = v.replace(/(\d{3})(\d)/, '$1.$2');
+            v = v.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+            e.target.value = v;
+        });
+
+        // Handle register form
+        document.getElementById('form-register').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            const data = Object.fromEntries(formData);
+            
+            // Validate passwords match
+            if (data.password !== data.confirm_password) {
+                document.getElementById('status-messages').innerHTML = '<div class="status error">As senhas não coincidem</div>';
+                return;
+            }
+            
+            // Clean CPF
+            if (data.cpf) {
+                data.cpf = data.cpf.replace(/\D/g, '');
+            }
+            
+            try {
+                const response = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                const statusBox = document.getElementById('status-messages');
+                
+                if (result.success) {
+                    statusBox.innerHTML = '<div class="status success">Conta criada com sucesso! Redirecionando...</div>';
+                    setTimeout(() => {
+                        window.location.href = '/login';
+                    }, 1500);
+                } else {
+                    statusBox.innerHTML = `<div class="status error">${result.message}</div>`;
+                }
+            } catch (error) {
+                document.getElementById('status-messages').innerHTML = '<div class="status error">Erro de comunicação com o servidor</div>';
+            }
+        });
+    </script>
+</body>
+</html>

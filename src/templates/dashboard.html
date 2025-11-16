@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Sistema de Ponto</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/app.css') }}">
+    <style>
+        .dashboard-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .dashboard-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        
+        .dashboard-header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            font-weight: 300;
+        }
+        
+        .dashboard-header p {
+            margin: 10px 0 0 0;
+            opacity: 0.9;
+        }
+        
+        .dashboard-content {
+            display: grid;
+            gap: 30px;
+        }
+        
+        .admin-dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 25px;
+        }
+        
+        .user-dashboard {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 25px;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+            border: 1px solid #e1e8ed;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15);
+        }
+        
+        .card-title {
+            font-size: 1.4em;
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .card-icon {
+            width: 24px;
+            height: 24px;
+            background: #667eea;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 12px;
+        }
+        
+        .loading {
+            text-align: center;
+            color: #666;
+            padding: 20px;
+        }
+        
+        .error {
+            color: #e74c3c;
+            background: #fdf2f2;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #e74c3c;
+        }
+        
+        .ranking-item {
+            display: flex;
+            justify-content: between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .ranking-item:last-child {
+            border-bottom: none;
+        }
+        
+        .ranking-position {
+            font-weight: bold;
+            color: #667eea;
+            margin-right: 15px;
+            min-width: 25px;
+        }
+        
+        .ranking-name {
+            flex: 1;
+            font-weight: 500;
+        }
+        
+        .ranking-hours {
+            color: #27ae60;
+            font-weight: 600;
+        }
+        
+        .presente-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .presente-item:last-child {
+            border-bottom: none;
+        }
+        
+        .presente-name {
+            font-weight: 500;
+        }
+        
+        .presente-time {
+            color: #666;
+            font-size: 0.9em;
+        }
+        
+        .ponto-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .ponto-item:last-child {
+            border-bottom: none;
+        }
+        
+        .ponto-data {
+            font-weight: 500;
+        }
+        
+        .ponto-info {
+            color: #666;
+            font-size: 0.9em;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .stat-item {
+            text-align: center;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+        
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .stat-label {
+            color: #666;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+        
+        .logout-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #e74c3c;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background 0.3s ease;
+        }
+        
+        .logout-btn:hover {
+            background: #c0392b;
+        }
+        
+        @media (max-width: 768px) {
+            .dashboard-container {
+                padding: 10px;
+            }
+            
+            .admin-dashboard {
+                grid-template-columns: 1fr;
+            }
+            
+            .dashboard-header h1 {
+                font-size: 2em;
+            }
+            
+            .logout-btn {
+                position: static;
+                margin-bottom: 20px;
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <button class="logout-btn" onclick="logout()">Sair</button>
+    
+    <div class="dashboard-container">
+        <div class="dashboard-header">
+            <h1>Dashboard</h1>
+            <p>Bem-vindo, {{ usuario.username }}{% if usuario.is_admin() %} (Administrador){% endif %}</p>
+        </div>
+        
+        <div class="dashboard-content">
+            {% if usuario.is_admin() %}
+            <!-- Dashboard Admin -->
+            <div class="admin-dashboard">
+                <!-- Ranking de Usuários -->
+                <div class="card">
+                    <div class="card-title">
+                        <div class="card-icon">🏆</div>
+                        Top 5 - Horas Trabalhadas (Mês Atual)
+                    </div>
+                    <div id="ranking-content">
+                        <div class="loading">Carregando ranking...</div>
+                    </div>
+                </div>
+                
+                <!-- Usuários Presentes -->
+                <div class="card">
+                    <div class="card-title">
+                        <div class="card-icon">👥</div>
+                        Usuários Presentes Agora
+                    </div>
+                    <div id="presentes-content">
+                        <div class="loading">Carregando usuários presentes...</div>
+                    </div>
+                </div>
+                
+                <!-- Resumo Geral -->
+                <div class="card" style="grid-column: 1 / -1;">
+                    <div class="card-title">
+                        <div class="card-icon">📊</div>
+                        Resumo de Todos os Usuários
+                    </div>
+                    <div id="resumo-content">
+                        <div class="loading">Carregando resumo...</div>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <!-- Dashboard Usuário -->
+            <div class="user-dashboard">
+                {% if usuario.cpf %}
+                <div class="card">
+                    <div class="card-title">
+                        <div class="card-icon">⏰</div>
+                        Meus Registros de Ponto
+                    </div>
+                    <div id="meus-pontos-content">
+                        <div class="loading">Carregando seus pontos...</div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="card">
+                    <div class="error">
+                        <strong>CPF não vinculado</strong><br>
+                        Seu usuário não possui CPF vinculado. Entre em contato com o administrador para vincular seus dados de ponto.
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        // Função para logout
+        function logout() {
+            if (confirm('Tem certeza que deseja sair?')) {
+                window.location.href = '/logout';
+            }
+        }
+        
+        // Função para formatar data
+        function formatarData(dataISO) {
+            const data = new Date(dataISO);
+            return data.toLocaleString('pt-BR');
+        }
+        
+        // Função para carregar ranking (apenas admin)
+        async function carregarRanking() {
+            try {
+                const response = await fetch('/api/dashboard/ranking');
+                const data = await response.json();
+                
+                const container = document.getElementById('ranking-content');
+                
+                if (data.success && data.ranking.length > 0) {
+                    let html = '';
+                    data.ranking.forEach((usuario, index) => {
+                        html += `
+                            <div class="ranking-item">
+                                <div class="ranking-position">${index + 1}º</div>
+                                <div class="ranking-name">${usuario.nome}</div>
+                                <div class="ranking-hours">${usuario.total_horas}h</div>
+                            </div>
+                        `;
+                    });
+                    container.innerHTML = html;
+                } else {
+                    container.innerHTML = '<div class="error">Nenhum dado de ranking encontrado</div>';
+                }
+            } catch (error) {
+                document.getElementById('ranking-content').innerHTML = 
+                    '<div class="error">Erro ao carregar ranking</div>';
+            }
+        }
+        
+        // Função para carregar usuários presentes (apenas admin)
+        async function carregarPresentes() {
+            try {
+                const response = await fetch('/api/dashboard/usuarios-presentes');
+                const data = await response.json();
+                
+                const container = document.getElementById('presentes-content');
+                
+                if (data.success && data.presentes.length > 0) {
+                    let html = '';
+                    data.presentes.forEach(usuario => {
+                        html += `
+                            <div class="presente-item">
+                                <div class="presente-name">${usuario.nome}</div>
+                                <div class="presente-time">${formatarData(usuario.ultimo_ponto)}</div>
+                            </div>
+                        `;
+                    });
+                    container.innerHTML = html;
+                } else {
+                    container.innerHTML = '<div class="error">Nenhum usuário presente no momento</div>';
+                }
+            } catch (error) {
+                document.getElementById('presentes-content').innerHTML = 
+                    '<div class="error">Erro ao carregar usuários presentes</div>';
+            }
+        }
+        
+        // Função para carregar resumo geral (apenas admin)
+        async function carregarResumo() {
+            try {
+                const response = await fetch('/api/dashboard/resumo-todos');
+                const data = await response.json();
+                
+                const container = document.getElementById('resumo-content');
+                
+                if (data.success && data.usuarios.length > 0) {
+                    let html = '<div class="stats-grid">';
+                    
+                    // Estatísticas gerais
+                    const totalUsuarios = data.usuarios.length;
+                    const usuariosComPonto = data.usuarios.filter(u => u.total_pontos > 0).length;
+                    const totalPontosHoje = data.usuarios.reduce((sum, u) => sum + u.pontos_hoje, 0);
+                    
+                    html += `
+                        <div class="stat-item">
+                            <div class="stat-number">${totalUsuarios}</div>
+                            <div class="stat-label">Total Usuários</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-number">${usuariosComPonto}</div>
+                            <div class="stat-label">Com Registros</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-number">${totalPontosHoje}</div>
+                            <div class="stat-label">Pontos Hoje</div>
+                        </div>
+                    `;
+                    html += '</div>';
+                    
+                    // Lista detalhada
+                    html += '<div style="margin-top: 25px;">';
+                    data.usuarios.forEach(usuario => {
+                        html += `
+                            <div class="ponto-item">
+                                <div>
+                                    <div class="ponto-data">${usuario.nome}</div>
+                                    <div class="ponto-info">
+                                        ${usuario.total_pontos} pontos totais • 
+                                        ${usuario.pontos_hoje} hoje • 
+                                        ${usuario.ultimo_ponto ? 'Último: ' + formatarData(usuario.ultimo_ponto) : 'Sem registros'}
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    html += '</div>';
+                    
+                    container.innerHTML = html;
+                } else {
+                    container.innerHTML = '<div class="error">Nenhum usuário encontrado</div>';
+                }
+            } catch (error) {
+                document.getElementById('resumo-content').innerHTML = 
+                    '<div class="error">Erro ao carregar resumo</div>';
+            }
+        }
+        
+        // Função para carregar pontos do usuário
+        async function carregarMeusPontos() {
+            const cpf = '{{ usuario.cpf }}';
+            if (!cpf) return;
+            
+            try {
+                const response = await fetch(`/api/dashboard/meus-pontos?cpf=${cpf}`);
+                const data = await response.json();
+                
+                const container = document.getElementById('meus-pontos-content');
+                
+                if (data.success && data.pontos.length > 0) {
+                    let html = '';
+                    data.pontos.slice(0, 20).forEach(ponto => { // Mostra apenas os últimos 20
+                        html += `
+                            <div class="ponto-item">
+                                <div>
+                                    <div class="ponto-data">${formatarData(ponto.data_hora)}</div>
+                                    <div class="ponto-info">
+                                        Confiança: ${(ponto.confianca * 100).toFixed(1)}% • 
+                                        Dispositivo: ${ponto.dispositivo || 'N/A'}
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    container.innerHTML = html;
+                } else {
+                    container.innerHTML = '<div class="error">Nenhum ponto registrado encontrado</div>';
+                }
+            } catch (error) {
+                document.getElementById('meus-pontos-content').innerHTML = 
+                    '<div class="error">Erro ao carregar seus pontos</div>';
+            }
+        }
+        
+        // Carrega dados quando a página carrega
+        document.addEventListener('DOMContentLoaded', function() {
+            {% if usuario.is_admin() %}
+                carregarRanking();
+                carregarPresentes();
+                carregarResumo();
+            {% else %}
+                {% if usuario.cpf %}
+                    carregarMeusPontos();
+                {% endif %}
+            {% endif %}
+        });
+    </script>
+</body>
+</html>

@@ -4,6 +4,7 @@ Models do sistema de reconhecimento facial para controle de ponto.
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, ForeignKey, Float, Enum
 from sqlalchemy.orm import relationship, declarative_base
+from werkzeug.security import generate_password_hash, check_password_hash
 import enum
 
 
@@ -68,4 +69,51 @@ class PontoUsuario(Base):
     
     # Relacionamento com usuário
     usuario = relationship("Usuario", back_populates="pontos")
+
+
+class TipoUsuario(enum.Enum):
+    """Enum para tipos de usuário do sistema de login"""
+    DEFAULT = "default"
+    ADMIN = "admin"
+
+
+class UsuarioLogin(Base):
+    """
+    Modelo de usuário para login e autenticação no sistema.
+    Separado do modelo Usuario (voluntários) para permitir diferentes fluxos.
     
+    Attributes:
+        id: Identificador único
+        username: Nome de usuário único para login
+        email: Email do usuário
+        password_hash: Hash da senha
+        cpf: CPF para linkagem com dados de ponto (opcional para admin)
+        tipo: Tipo do usuário (default ou admin)
+        ativo: Flag se usuário está ativo
+        criado_em: Data de criação
+        ultimo_login: Data do último login
+    """
+    __tablename__ = 'usuarios_login'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    username = Column(String(50), unique=True, nullable=False, index=True)
+    email = Column(String(255), unique=True, nullable=False)
+    password_hash = Column(String(255), nullable=False)
+    cpf = Column(String(11), nullable=True, index=True)  # Link com dados de ponto (pode ser NULL para admins)
+    tipo = Column(Enum(TipoUsuario), default=TipoUsuario.DEFAULT, nullable=False)
+    ativo = Column(Boolean, default=True, nullable=False)
+    criado_em = Column(DateTime, default=datetime.utcnow, nullable=False)
+    ultimo_login = Column(DateTime, nullable=True)
+    
+    def set_password(self, password: str):
+        """Define a senha do usuário (com hash)"""
+        self.password_hash = generate_password_hash(password)
+    
+    def check_password(self, password: str) -> bool:
+        """Verifica se a senha está correta"""
+        return check_password_hash(self.password_hash, password)
+    
+    def is_admin(self) -> bool:
+        """Verifica se o usuário é admin"""
+        return self.tipo == TipoUsuario.ADMIN
+
